@@ -1,6 +1,8 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const dotenv = require('dotenv');
 const { EXPENSE_PARSER_PROMPT } = require('../config/prompts');
+const { sanitizeInput } = require('../utils/sanitizer');
+
 
 dotenv.config();
 
@@ -11,7 +13,7 @@ class AIParser {
         }
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         // Menggunakan Gemini 3 Flash yang merupakan standar terbaru di 2026
-        this.model = this.genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+        this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     }
 
     /**
@@ -19,7 +21,8 @@ class AIParser {
      */
     async parseExpense(text) {
         try {
-            const prompt = `${EXPENSE_PARSER_PROMPT}\n\nInput: "${text}"\nOutput:`;
+            const cleanText = sanitizeInput(text);
+            const prompt = `${EXPENSE_PARSER_PROMPT}\n\nInput: "${cleanText}"\nOutput:`;
             const result = await this.model.generateContent(prompt);
             return this._processResult(result);
         } catch (error) {

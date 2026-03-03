@@ -1,14 +1,18 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { handleMessage } = require('./handlers/messageHandler');
+const RateLimiter = require('./utils/rateLimiter');
 const logger = require('./utils/logger');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
-// Inisialisasi WhatsApp Client
+// Batasi 10 pesan per menit per user
+const limiter = new RateLimiter(10, 60000);
+
+
 const client = new Client({
-    authStrategy: new LocalAuth(), // Menyimpan session agar tidak perlu scan QR terus
+    authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
         args: [
@@ -24,43 +28,30 @@ const client = new Client({
     }
 });
 
-// Event: Menampilkan QR Code di Terminal
 client.on('qr', (qr) => {
     console.log('\n--- SCAN QR CODE INI DENGAN WHATSAPP KAMU ---\n');
     qrcode.generate(qr, { small: true });
     logger.info('QR Code di-generate, menunggu scan...');
 });
 
-// Event: Berhasil Login
 client.on('ready', () => {
     console.log('\n Bot HitungUang SIAP!');
     logger.info('Bot WhatsApp Ready');
 });
 
-// Event: Menerima Pesan dari orang lain
 client.on('message', async (msg) => {
     processMessage(msg);
 });
-
-// Event: Menerima Pesan yang kita kirim sendiri (Message Yourself)
 client.on('message_create', async (msg) => {
-    // Kita hanya proses jika pesan tsb dibuat oleh kita sendiri (self)
-    // dan bukan merupakan balasan dari bot (untuk menghindari loop)
     if (msg.fromMe) {
         processMessage(msg);
     }
 });
 
-/**
- * Fungsi pembantu untuk memproses pesan dengan filter terpusat
- */
 async function processMessage(msg) {
-    // 1. Abaikan Group (tanpa getChat untuk menghindari bug library di self-chat)
     if (msg.id.remote.endsWith('@g.us')) return;
 
     const text = msg.body;
-
-    // 2. BOT GUARD: Abaikan jika pesan ini adalah balasan dari Bot itu sendiri (mencegah loop)
     const botSignatures = [
         '✅ *Berhasil Dicatat!*',
         '📊 *Hasil Analisa AI*',
@@ -73,16 +64,20 @@ async function processMessage(msg) {
         return;
     }
 
-    // 3. Filter allowed numbers (opsional dari .env)
-    const allowedNumbers = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',') : [];
+    // const allowedNumbers = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',') : [];
 
-    // Penentuan sender yang akurat untuk log/filter
-    // Jika pesan dari kita (fromMe), maka subjeknya adalah nomor kita sendiri (msg.from)
-    const sender = msg.from.split('@')[0];
+    const contact = await msg.getContact();
+    const sender = contact.number;
 
-    if (allowedNumbers.length > 0 && !allowedNumbers.includes(sender)) {
-        return;
+    // Cek Rate Limit (Anti-Flood)
+    if (limiter.isRateLimited(sender)) {
+        logger.warn(`Rate limit terlampaui untuk ${sender}`);
+        return await msg.reply('⚠️ Anda mengirim pesan terlalu cepat. Silakan tunggu sebentar.');
     }
+
+    // if (allowedNumbers.length > 0 && !allowedNumbers.includes(sender)) {
+    //     return;
+    // }
 
     // 4. Jalankan handler
     handleMessage(msg);

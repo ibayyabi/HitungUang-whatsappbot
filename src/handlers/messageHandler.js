@@ -8,25 +8,13 @@ const logger = require('../utils/logger');
  */
 async function handleMessage(msg) {
     const text = (msg.body || '').trim().toLowerCase();
-    const sender = msg.from.split('@')[0]; // Ambil nomornya saja (misal: 628xxx)
 
-    // A. Filter dasar: Apakah ini pertanyaan, transaksi teks, atau media?
-    const isQuestion = !msg.hasMedia && (
-        text.includes('?') ||
-        ['apa', 'berapa', 'mana', 'kapan', 'tampilkan', 'summary', 'rekap', 'total'].some(kw => text.startsWith(kw)) ||
-        ['minggu ini', 'bulan ini', 'hari ini'].some(kw => text.includes(kw))
-    );
-
-    const amountRegex = /\d+/;
-    const isTransactionText = amountRegex.test(text);
-    const hasMedia = msg.hasMedia;
-
-    if (!isQuestion && !isTransactionText && !hasMedia) {
-        return; // Pesan biasa diabaikan
-    }
+    // Ambil nomor telepon asli (hindari LID/ID unik WhatsApp)
+    const contact = await msg.getContact();
+    const sender = contact.number; // Ini akan menghasilkan '628xxx' bukan LID
 
     try {
-        // B. WAJIB CEK REGISTRASI (LOCK FIRST)
+        // A. WAJIB CEK REGISTRASI (LOCK FIRST)
         logger.info(`Memeriksa registrasi untuk nomor: ${sender}`);
         const user = await dbService.getUserByWhatsapp(sender);
 
@@ -38,6 +26,21 @@ async function handleMessage(msg) {
                 `Setelah mendaftar, Anda bisa langsung kirim catatan belanja di sini!`;
 
             return await msg.reply(welcomeText);
+        }
+
+        // B. Filter dasar: Apakah ini pertanyaan, transaksi teks, atau media?
+        const isQuestion = !msg.hasMedia && (
+            text.includes('?') ||
+            ['apa', 'berapa', 'mana', 'kapan', 'tampilkan', 'summary', 'rekap', 'total'].some(kw => text.startsWith(kw)) ||
+            ['minggu ini', 'bulan ini', 'hari ini'].some(kw => text.includes(kw))
+        );
+
+        const amountRegex = /\d+/;
+        const isTransactionText = amountRegex.test(text);
+        const hasMedia = msg.hasMedia;
+
+        if (!isQuestion && !isTransactionText && !hasMedia) {
+            return; // Pesan biasa diabaikan untuk user terdaftar
         }
 
         // C. Proses NL Query
@@ -56,7 +59,19 @@ async function handleMessage(msg) {
                 logger.info(`Mendownload media dari ${sender} (${msg.type})...`);
                 const media = await msg.downloadMedia();
 
+                // Validasi Ukuran (Maks 5MB)
+                const fileSizeMB = (media.data.length * 3) / 4 / 1024 / 1024;
+                if (fileSizeMB > 5) {
+                    return await msg.reply('⚠️ Ukuran file terlalu besar (Maks 5MB).');
+                }
+
                 if (msg.type === 'image') {
+                    // Validasi MIME Type Image
+                    const allowedImageMimes = ['image/jpeg', 'image/png', 'image/webp'];
+                    if (!allowedImageMimes.includes(media.mimetype)) {
+                        return await msg.reply('⚠️ Format gambar tidak didukung. Kirim JPG, PNG, atau WebP.');
+                    }
+
                     logger.info(`Memproses OCR Gambar dari ${sender}`);
                     parsedData = await aiParser.parseImage(media);
                     rawTextForDb = `[Kirim Gambar] ${text}`;
@@ -65,21 +80,19 @@ async function handleMessage(msg) {
                     parsedData = await aiParser.parseAudio(media);
                     rawTextForDb = `[Voice Note]`;
                 } else {
-                    return; // Abaikan media lain seperti video atau dokumen
+                    return await msg.reply('⚠️ Format media tidak didukung.');
                 }
             } else {
                 logger.info(`Mencatat transaksi teks dari ${sender}: "${text}"`);
                 parsedData = await aiParser.parseExpense(text);
             }
 
-            // Normalisasi data
             const items = Array.isArray(parsedData) ? parsedData : [parsedData];
 
             if (items.length === 0 || !items[0].item) {
                 throw new Error('Data tidak valid setelah di-parse AI');
             }
 
-            // Simpan dan buat balasan konfirmasi
             let confirmationText = '✅ *Berhasil Dicatat!* \n\n';
             let totalPengeluaran = 0;
             let totalPemasukan = 0;

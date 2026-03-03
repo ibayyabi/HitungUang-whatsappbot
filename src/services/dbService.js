@@ -40,7 +40,6 @@ async function getUserByWhatsapp(whatsappNumber) {
  */
 async function appendTransaction(data) {
     try {
-        // 1. WAJIB cari user_id berdasarkan nomor WA
         const user = await getUserByWhatsapp(data.whatsappNumber);
 
         if (!user) {
@@ -71,5 +70,5 @@ async function appendTransaction(data) {
 module.exports = {
     getUserByWhatsapp,
     appendTransaction,
-    supabase // Export client for other services (NL2SQL)
+    supabase
 };
