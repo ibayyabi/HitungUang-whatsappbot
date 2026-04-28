@@ -2,12 +2,13 @@ const aiParser = require('../services/aiParser');
 const dbService = require('../services/dbService');
 const nl2sqlService = require('../services/nl2sqlService');
 const logger = require('../utils/logger');
+const { classifyMessage } = require('../utils/messageClassifier');
 
 /**
  * Fungsi utama untuk memproses pesan masuk
  */
 async function handleMessage(msg) {
-    const text = (msg.body || '').trim().toLowerCase();
+    const originalText = (msg.body || '').trim();
 
     // Ambil nomor telepon asli (hindari LID/ID unik WhatsApp)
     const contact = await msg.getContact();
@@ -28,34 +29,30 @@ async function handleMessage(msg) {
             return await msg.reply(welcomeText);
         }
 
-        // B. Filter dasar: Apakah ini pertanyaan, transaksi teks, atau media?
-        const isQuestion = !msg.hasMedia && (
-            text.includes('?') ||
-            ['apa', 'berapa', 'mana', 'kapan', 'tampilkan', 'summary', 'rekap', 'total'].some(kw => text.startsWith(kw)) ||
-            ['minggu ini', 'bulan ini', 'hari ini'].some(kw => text.includes(kw))
-        );
+        // B. Klasifikasikan pesan dengan prioritas transaksi > pertanyaan
+        const messageType = classifyMessage({
+            text: originalText,
+            hasMedia: msg.hasMedia
+        });
+        const text = messageType.normalizedText;
 
-        const amountRegex = /\d+/;
-        const isTransactionText = amountRegex.test(text);
-        const hasMedia = msg.hasMedia;
-
-        if (!isQuestion && !isTransactionText && !hasMedia) {
+        if (!messageType.shouldProcess) {
             return; // Pesan biasa diabaikan untuk user terdaftar
         }
 
         // C. Proses NL Query
-        if (isQuestion) {
+        if (messageType.isQuestion) {
             logger.info(`Memproses NL Query dari ${sender}: "${text}"`);
-            const response = await nl2sqlService.processNLQuery(msg, sender);
+            const response = await nl2sqlService.processNLQuery(msg, sender, user);
             return await msg.reply(response);
         }
 
         // D. Proses Transaksi (Teks, Gambar, atau Audio)
-        if (isTransactionText || hasMedia) {
+        if (messageType.isTransactionText || msg.hasMedia) {
             let parsedData;
-            let rawTextForDb = text;
+            let rawTextForDb = originalText;
 
-            if (hasMedia) {
+            if (msg.hasMedia) {
                 logger.info(`Mendownload media dari ${sender} (${msg.type})...`);
                 const media = await msg.downloadMedia();
 
@@ -74,7 +71,7 @@ async function handleMessage(msg) {
 
                     logger.info(`Memproses OCR Gambar dari ${sender}`);
                     parsedData = await aiParser.parseImage(media);
-                    rawTextForDb = `[Kirim Gambar] ${text}`;
+                    rawTextForDb = `[Kirim Gambar] ${originalText}`;
                 } else if (msg.type === 'audio' || msg.type === 'ptt') {
                     logger.info(`Memproses Voice Note dari ${sender}`);
                     parsedData = await aiParser.parseAudio(media);
@@ -97,13 +94,18 @@ async function handleMessage(msg) {
             let totalPengeluaran = 0;
             let totalPemasukan = 0;
 
-            for (const item of items) {
-                await dbService.appendTransaction({
-                    ...item,
-                    rawText: rawTextForDb,
-                    whatsappNumber: sender
-                });
+            const insertResult = await dbService.appendTransactions(items.map((item) => ({
+                ...item,
+                rawText: rawTextForDb,
+                whatsappNumber: sender,
+                userId: user.id
+            })));
 
+            if (insertResult && insertResult.duplicate && insertResult.insertedCount === 0) {
+                return await msg.reply('⚠️ Catatan ini sudah pernah tersimpan sebelumnya, jadi saya tidak mencatat duplikat.');
+            }
+
+            for (const item of items) {
                 const emoji = item.tipe === 'pemasukan' ? '💰' : '💸';
                 const tipeLabel = item.tipe === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran';
 
@@ -119,6 +121,10 @@ async function handleMessage(msg) {
             if (items.length > 1) {
                 if (totalPemasukan > 0) confirmationText += `\n*Total Pemasukan:* Rp ${totalPemasukan.toLocaleString('id-ID')}`;
                 if (totalPengeluaran > 0) confirmationText += `\n*Total Pengeluaran:* Rp ${totalPengeluaran.toLocaleString('id-ID')}`;
+            }
+
+            if (insertResult && insertResult.skippedCount > 0) {
+                confirmationText += `\n\n⚠️ ${insertResult.skippedCount} item duplikat tidak dicatat ulang.`;
             }
 
             await msg.reply(confirmationText);

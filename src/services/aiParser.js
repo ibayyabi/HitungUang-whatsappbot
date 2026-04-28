@@ -2,9 +2,90 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const dotenv = require('dotenv');
 const { EXPENSE_PARSER_PROMPT } = require('../config/prompts');
 const { sanitizeInput } = require('../utils/sanitizer');
+const logger = require('../utils/logger');
+const {
+    DEFAULT_TRANSACTION_CATEGORY,
+    isValidTransactionCategory,
+    isValidTransactionType
+} = require('../../shared/contracts');
 
 
 dotenv.config();
+
+function extractJsonPayload(responseText) {
+    const trimmed = (responseText || '').trim();
+    const withoutCodeFence = trimmed.replace(/```json|```/gi, '').trim();
+
+    if (!withoutCodeFence) {
+        throw new Error('AI returned empty response');
+    }
+
+    const directStart = withoutCodeFence[0];
+    if (directStart === '{' || directStart === '[') {
+        return withoutCodeFence;
+    }
+
+    const firstObjectIndex = withoutCodeFence.indexOf('{');
+    const firstArrayIndex = withoutCodeFence.indexOf('[');
+    const startCandidates = [firstObjectIndex, firstArrayIndex].filter((index) => index >= 0);
+
+    if (startCandidates.length === 0) {
+        throw new Error('AI response does not contain JSON');
+    }
+
+    const startIndex = Math.min(...startCandidates);
+    const openingChar = withoutCodeFence[startIndex];
+    const closingChar = openingChar === '{' ? '}' : ']';
+    const endIndex = withoutCodeFence.lastIndexOf(closingChar);
+
+    if (endIndex <= startIndex) {
+        throw new Error('AI response contains incomplete JSON');
+    }
+
+    return withoutCodeFence.slice(startIndex, endIndex + 1).trim();
+}
+
+function normalizeParsedExpense(parsed) {
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+
+    if (items.length === 0) {
+        throw new Error('AI returned empty transaction list');
+    }
+
+    const normalizedItems = items.map((item) => {
+        if (!item || typeof item !== 'object') {
+            throw new Error('AI returned invalid transaction item');
+        }
+
+        const normalizedItem = {
+            item: typeof item.item === 'string' ? item.item.trim() : '',
+            harga: Number(item.harga),
+            kategori: typeof item.kategori === 'string' && item.kategori.trim() ? item.kategori.trim().toLowerCase() : DEFAULT_TRANSACTION_CATEGORY,
+            lokasi: typeof item.lokasi === 'string' && item.lokasi.trim() ? item.lokasi.trim() : null,
+            tipe: typeof item.tipe === 'string' ? item.tipe.trim().toLowerCase() : ''
+        };
+
+        if (!normalizedItem.item) {
+            throw new Error('AI transaction item is missing name');
+        }
+
+        if (!Number.isFinite(normalizedItem.harga) || normalizedItem.harga <= 0) {
+            throw new Error('AI transaction item has invalid amount');
+        }
+
+        if (!isValidTransactionType(normalizedItem.tipe)) {
+            throw new Error('AI transaction item has invalid type');
+        }
+
+        if (!isValidTransactionCategory(normalizedItem.kategori)) {
+            normalizedItem.kategori = normalizedItem.tipe === 'pemasukan' ? 'lainnya_masuk' : DEFAULT_TRANSACTION_CATEGORY;
+        }
+
+        return normalizedItem;
+    });
+
+    return Array.isArray(parsed) ? normalizedItems : normalizedItems[0];
+}
 
 class AIParser {
     constructor() {
@@ -26,7 +107,7 @@ class AIParser {
             const result = await this.model.generateContent(prompt);
             return this._processResult(result);
         } catch (error) {
-            console.error('Error in AI Parser (Text):', error);
+            logger.error(`Error in AI Parser (Text): ${error.message}`);
             throw error;
         }
     }
@@ -49,7 +130,7 @@ class AIParser {
             const result = await this.model.generateContent([prompt, ...imageParts]);
             return this._processResult(result);
         } catch (error) {
-            console.error('Error in AI Parser (Image):', error);
+            logger.error(`Error in AI Parser (Image): ${error.message}`);
             throw error;
         }
     }
@@ -72,7 +153,7 @@ class AIParser {
             const result = await this.model.generateContent([prompt, ...audioParts]);
             return this._processResult(result);
         } catch (error) {
-            console.error('Error in AI Parser (Audio):', error);
+            logger.error(`Error in AI Parser (Audio): ${error.message}`);
             throw error;
         }
     }
@@ -82,15 +163,19 @@ class AIParser {
      */
     async _processResult(result) {
         const responseText = result.response.text().trim();
-        const cleanedJson = responseText.replace(/```json|```/g, '').trim();
 
         try {
-            return JSON.parse(cleanedJson);
+            const jsonPayload = extractJsonPayload(responseText);
+            const parsed = JSON.parse(jsonPayload);
+            return normalizeParsedExpense(parsed);
         } catch (parseError) {
-            console.error('Failed to parse AI response as JSON:', responseText);
+            logger.error(`Failed to parse AI response: ${parseError.message}`);
             throw new Error('AI returned invalid format');
         }
     }
 }
 
 module.exports = new AIParser();
+module.exports.AIParser = AIParser;
+module.exports.extractJsonPayload = extractJsonPayload;
+module.exports.normalizeParsedExpense = normalizeParsedExpense;
