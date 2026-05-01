@@ -98,7 +98,7 @@ describe('authLinkService', () => {
         dbService.supabase.auth.admin.updateUserById.mockResolvedValue({
             data: {
                 user: {
-                    email: 'wa-628111111111@auth.hitunguang.local'
+                email: 'wa-628111111111@auth.cuanberes.local'
                 }
             },
             error: null
@@ -118,11 +118,11 @@ describe('authLinkService', () => {
         });
 
         expect(dbService.supabase.auth.admin.updateUserById).toHaveBeenCalledWith('user-2', expect.objectContaining({
-            email: 'wa-628111111111@auth.hitunguang.local',
+            email: 'wa-628111111111@auth.cuanberes.local',
             email_confirm: true
         }));
         expect(dbService.supabase.auth.admin.generateLink).toHaveBeenCalledWith(expect.objectContaining({
-            email: 'wa-628111111111@auth.hitunguang.local'
+            email: 'wa-628111111111@auth.cuanberes.local'
         }));
     });
 });

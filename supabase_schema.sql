@@ -43,5 +43,16 @@ CREATE POLICY "Users can manage own transactions"
 ON public.transactions FOR ALL 
 USING (auth.uid() = user_id);
 
+-- Explicit dashboard-safe write policies for anon + authenticated clients.
+-- The bot may still use the service role key server-side after WhatsApp lookup.
+CREATE POLICY "Users can insert own transactions"
+ON public.transactions FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own transactions"
+ON public.transactions FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
 -- 3. Functions & Triggers (Opsional: Sync profiles on auth signup)
 -- User harus mendaftar via Web App agar data WA terhubung.

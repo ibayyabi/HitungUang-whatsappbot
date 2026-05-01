@@ -15,6 +15,10 @@ jest.mock('../services/nl2sqlService', () => ({
     processNLQuery: jest.fn()
 }));
 
+jest.mock('../services/authLinkService', () => ({
+    requestAuthLink: jest.fn()
+}));
+
 jest.mock('../utils/logger', () => ({
     info: jest.fn(),
     warn: jest.fn(),
@@ -22,6 +26,7 @@ jest.mock('../utils/logger', () => ({
 }));
 
 const aiParser = require('../services/aiParser');
+const authLinkService = require('../services/authLinkService');
 const dbService = require('../services/dbService');
 const nl2sqlService = require('../services/nl2sqlService');
 const { handleMessage } = require('../handlers/messageHandler');
@@ -41,6 +46,9 @@ describe('handleMessage', () => {
         jest.clearAllMocks();
         dbService.getUserByWhatsapp.mockResolvedValue({ id: 'user-1' });
         dbService.appendTransactions.mockResolvedValue({ success: true, insertedCount: 1 });
+        authLinkService.requestAuthLink.mockResolvedValue({
+            actionLink: 'https://supabase.test/magic'
+        });
     });
 
     test('mencatat transaksi pemasukan meski mengandung frasa bulan ini', async () => {
@@ -88,5 +96,18 @@ describe('handleMessage', () => {
         await handleMessage(msg);
 
         expect(msg.reply).toHaveBeenCalledWith('⚠️ Catatan ini sudah pernah tersimpan sebelumnya, jadi saya tidak mencatat duplikat.');
+    });
+    test('mengirim magic link ketika user meminta dashboard', async () => {
+        const msg = createMessage('akses dashboard');
+
+        await handleMessage(msg);
+
+        expect(authLinkService.requestAuthLink).toHaveBeenCalledWith({
+            whatsappNumber: '628123',
+            purpose: 'login_web',
+            redirectTo: '/dashboard'
+        });
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('https://supabase.test/magic'));
+        expect(dbService.appendTransactions).not.toHaveBeenCalled();
     });
 });

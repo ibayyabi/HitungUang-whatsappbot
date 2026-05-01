@@ -1,5 +1,3 @@
-import authLinkService from '../../../../../src/services/authLinkService';
-
 function createErrorResponse(message, status) {
     return Response.json({
         success: false,
@@ -9,6 +7,8 @@ function createErrorResponse(message, status) {
 
 export async function POST(request) {
     try {
+        const authModule = await import('../../../../../src/services/authLinkService');
+        const authLinkService = authModule.default || authModule;
         const body = await request.json();
         const result = await authLinkService.requestAuthLink({
             whatsappNumber: body && body.whatsapp_number,

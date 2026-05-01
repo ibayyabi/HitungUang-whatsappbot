@@ -4,7 +4,7 @@ const { isValidAuthPurpose } = require('../../shared/contracts');
 
 const DEFAULT_PURPOSE = 'login_web';
 const DEFAULT_REDIRECT_PATH = '/';
-const DEFAULT_PROXY_EMAIL_DOMAIN = 'auth.hitunguang.local';
+const DEFAULT_PROXY_EMAIL_DOMAIN = 'auth.cuanberes.local';
 
 function normalizeWhatsappNumber(value) {
     return String(value || '').replace(/\D/g, '');

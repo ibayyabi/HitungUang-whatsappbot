@@ -1,8 +1,20 @@
 const aiParser = require('../services/aiParser');
+const authLinkService = require('../services/authLinkService');
 const dbService = require('../services/dbService');
 const nl2sqlService = require('../services/nl2sqlService');
 const logger = require('../utils/logger');
 const { classifyMessage } = require('../utils/messageClassifier');
+
+const DASHBOARD_ACCESS_COMMANDS = new Set([
+    'dashboard',
+    'login',
+    'akses dashboard',
+    'buka dashboard'
+]);
+
+function isDashboardAccessCommand(text) {
+    return DASHBOARD_ACCESS_COMMANDS.has(String(text || '').trim().toLowerCase());
+}
 
 /**
  * Fungsi utama untuk memproses pesan masuk
@@ -27,6 +39,18 @@ async function handleMessage(msg) {
                 `Setelah mendaftar, Anda bisa langsung kirim catatan belanja di sini!`;
 
             return await msg.reply(welcomeText);
+        }
+
+        if (isDashboardAccessCommand(originalText)) {
+            const link = await authLinkService.requestAuthLink({
+                whatsappNumber: sender,
+                purpose: 'login_web',
+                redirectTo: '/dashboard'
+            });
+
+            return await msg.reply(
+                `Ini link masuk Dashboard CuanBeres Anda:\n\n${link.actionLink}\n\nLink ini bersifat pribadi. Jangan dibagikan.`
+            );
         }
 
         // B. Klasifikasikan pesan dengan prioritas transaksi > pertanyaan

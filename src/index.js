@@ -76,6 +76,7 @@ async function processMessage(msg) {
         '📊 *Hasil Analisa AI*',
         'Halo! 👋 Saya *HitungUang Bot*',
         '⚠️ *Nomor Anda belum terhubung*',
+        'Ini link masuk Dashboard CuanBeres Anda:',
         '❌ Maaf, saya gagal'
     ];
 

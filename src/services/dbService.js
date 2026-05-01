@@ -14,7 +14,17 @@ if (!supabaseUrl || !supabaseServiceKey) {
     logger.error('Supabase URL atau Service Key tidak ditemukan di .env');
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+function createMissingSupabaseProxy() {
+    return new Proxy({}, {
+        get() {
+            throw new Error('Konfigurasi Supabase admin belum lengkap.');
+        }
+    });
+}
+
+const supabase = supabaseUrl && supabaseServiceKey
+    ? createClient(supabaseUrl, supabaseServiceKey)
+    : createMissingSupabaseProxy();
 const DUPLICATE_LOOKBACK_MINUTES = 10;
 
 function normalizeComparableValue(value) {

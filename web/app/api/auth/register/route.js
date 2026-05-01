@@ -1,11 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+function createAdminClient() {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+        throw new Error('Konfigurasi Supabase admin belum lengkap.');
+    }
+
+    return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 export async function POST(request) {
     try {
+        const supabase = createAdminClient();
         const body = await request.json();
         const { whatsapp_number, display_name } = body;
 
@@ -15,7 +23,7 @@ export async function POST(request) {
 
         // 1. Buat user di Auth (Admin)
         // Kita gunakan password acak atau biarkan kosong (magic link only)
-        const proxyEmail = `wa-${whatsapp_number}@${process.env.AUTH_PROXY_EMAIL_DOMAIN || 'auth.hitunguang.local'}`;
+        const proxyEmail = `wa-${whatsapp_number}@${process.env.AUTH_PROXY_EMAIL_DOMAIN || 'auth.cuanberes.local'}`;
         
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email: proxyEmail,
