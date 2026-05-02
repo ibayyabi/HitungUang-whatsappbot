@@ -33,6 +33,7 @@ function buildRegisterUrl(message) {
     const target = new URL('/register', baseUrl);
 
     target.searchParams.set('telegram_user_id', message.senderId);
+    target.searchParams.set('whatsapp', message.senderId);
 
     if (message.chatId) {
         target.searchParams.set('chat_id', message.chatId);
@@ -65,11 +66,11 @@ async function replyUnregistered(message) {
     const welcomeText = [
         'Halo! Saya HitungUang Bot.',
         '',
-        'Akun Telegram Anda belum terdaftar. Untuk mulai menggunakan fitur catat otomatis dan dashboard AI, silakan daftar di link berikut:',
+        'Nomor WhatsApp Anda belum terdaftar. Untuk mulai menggunakan fitur catat otomatis dan dashboard AI, silakan daftar di link berikut:',
         '',
         registerUrl,
         '',
-        'Setelah mendaftar, Anda bisa langsung kirim catatan belanja di Telegram.'
+        'Setelah mendaftar, Anda bisa langsung kirim catatan belanja di WhatsApp.'
     ].join('\n');
 
     await message.reply(welcomeText);
@@ -101,20 +102,20 @@ async function handleMessage(input) {
     }
 
     if (!sender || typeof message.reply !== 'function') {
-        throw new Error('Adapter pesan Telegram tidak lengkap.');
+        throw new Error('Adapter pesan chat tidak lengkap.');
     }
 
     try {
-        logger.info(`Memeriksa registrasi untuk Telegram user: ${sender}`);
+        logger.info(`Memeriksa registrasi untuk WhatsApp user: ${sender}`);
         const user = await dbService.getUserByTelegramId(sender);
 
         if (!user) {
-            logger.warn(`Telegram user ${sender} mencoba akses tapi belum terdaftar.`);
+            logger.warn(`WhatsApp user ${sender} mencoba akses tapi belum terdaftar.`);
             return await replyUnregistered(message);
         }
 
         if (isStartCommand(originalText)) {
-            return await message.reply(`Halo ${user.display_name || message.displayName || 'User'}! Akun Telegram Anda sudah terhubung. Kirim "bakso 15rb" untuk mencatat transaksi, atau /dashboard untuk membuka dashboard.`);
+            return await message.reply(`Halo ${user.display_name || message.displayName || 'User'}! Nomor WhatsApp Anda sudah terhubung. Kirim "bakso 15rb" untuk mencatat transaksi, atau /dashboard untuk membuka dashboard.`);
         }
 
         if (isHelpCommand(originalText)) {
@@ -144,7 +145,7 @@ async function handleMessage(input) {
         }
 
         if (messageType.isQuestion) {
-            logger.info(`Memproses NL Query dari Telegram user ${sender}: "${text}"`);
+            logger.info(`Memproses NL Query dari WhatsApp user ${sender}: "${text}"`);
             const response = await nl2sqlService.processNLQuery(message, sender, user);
             return await message.reply(response);
         }
@@ -158,7 +159,7 @@ async function handleMessage(input) {
                     return await message.reply('⚠️ Media tidak bisa diproses saat ini.');
                 }
 
-                logger.info(`Mendownload media dari Telegram user ${sender} (${message.mediaType})...`);
+                logger.info(`Mendownload media dari WhatsApp user ${sender} (${message.mediaType})...`);
                 const media = await message.downloadMedia();
 
                 const fileSizeMB = (media.data.length * 3) / 4 / 1024 / 1024;
@@ -172,18 +173,18 @@ async function handleMessage(input) {
                         return await message.reply('⚠️ Format gambar tidak didukung. Kirim JPG, PNG, atau WebP.');
                     }
 
-                    logger.info(`Memproses OCR gambar dari Telegram user ${sender}`);
+                    logger.info(`Memproses OCR gambar dari WhatsApp user ${sender}`);
                     parsedData = await aiParser.parseImage(media);
                     rawTextForDb = `[Kirim Gambar] ${originalText}`;
                 } else if (message.mediaType === 'voice' || message.mediaType === 'audio') {
-                    logger.info(`Memproses audio dari Telegram user ${sender}`);
+                    logger.info(`Memproses audio dari WhatsApp user ${sender}`);
                     parsedData = await aiParser.parseAudio(media);
                     rawTextForDb = '[Voice Note]';
                 } else {
                     return await message.reply('⚠️ Format media tidak didukung.');
                 }
             } else {
-                logger.info(`Mencatat transaksi teks dari Telegram user ${sender}: "${text}"`);
+                logger.info(`Mencatat transaksi teks dari WhatsApp user ${sender}: "${text}"`);
                 parsedData = await aiParser.parseExpense(text);
             }
 
@@ -231,7 +232,7 @@ async function handleMessage(input) {
             }
 
             await message.reply(confirmationText);
-            logger.info(`Berhasil mencatat ${items.length} item ke Supabase untuk Telegram user ${sender}`);
+            logger.info(`Berhasil mencatat ${items.length} item ke Supabase untuk WhatsApp user ${sender}`);
         }
 
     } catch (error) {

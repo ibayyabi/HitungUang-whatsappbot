@@ -85,6 +85,44 @@ describe('authLinkService', () => {
         });
     });
 
+    test('requestAuthLink memakai verify URL langsung jika hashed token tersedia', async () => {
+        dbService.getUserByTelegramId.mockResolvedValue({
+            id: 'user-1',
+            telegram_user_id: '123456789',
+            telegram_username: 'ikhbar',
+            display_name: 'Ikhbar'
+        });
+        dbService.supabase.auth.admin.getUserById.mockResolvedValue({
+            data: {
+                user: {
+                    id: 'user-1',
+                    email: 'user@example.com',
+                    user_metadata: {}
+                }
+            },
+            error: null
+        });
+        dbService.supabase.auth.admin.generateLink.mockResolvedValue({
+            data: {
+                properties: {
+                    action_link: 'https://supabase.test/auth?token=abc',
+                    hashed_token: 'hashed-token',
+                    verification_type: 'magiclink'
+                }
+            },
+            error: null
+        });
+
+        const result = await authLinkService.requestAuthLink({
+            telegramUserId: '123456789',
+            purpose: 'login_web',
+            redirectTo: '/dashboard'
+        });
+
+        expect(result.actionLink).toBe('http://localhost:3000/verify?purpose=login_web&next=%2Fdashboard&token_hash=hashed-token&type=magiclink');
+    });
+
+
     test('requestAuthLink mengisi proxy email bila auth user belum punya email', async () => {
         dbService.getUserByTelegramId.mockResolvedValue({
             id: 'user-2',

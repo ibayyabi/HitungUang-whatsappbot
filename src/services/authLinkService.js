@@ -51,6 +51,15 @@ function buildVerifyRedirectUrl({ purpose, redirectTo }) {
     return target.toString();
 }
 
+function buildDirectVerifyUrl({ purpose, redirectTo, tokenHash, type }) {
+    const target = new URL(buildVerifyRedirectUrl({ purpose, redirectTo }));
+
+    target.searchParams.set('token_hash', tokenHash);
+    target.searchParams.set('type', type || 'magiclink');
+
+    return target.toString();
+}
+
 async function ensureAuthUserEmail(profile) {
     let authUser;
     
@@ -168,10 +177,20 @@ async function requestAuthLink(input) {
 
     const properties = (data && data.properties) || {};
     const actionLink = properties.action_link || properties.actionLink;
+    const tokenHash = properties.hashed_token || properties.hashedToken;
 
     if (!actionLink) {
         throw new Error('Supabase tidak mengembalikan action link.');
     }
+
+    const resolvedActionLink = tokenHash
+        ? buildDirectVerifyUrl({
+            purpose,
+            redirectTo,
+            tokenHash,
+            type: properties.verification_type || 'magiclink'
+        })
+        : actionLink;
 
     const resolvedTelegramUserId = profile.telegram_user_id;
 
@@ -184,7 +203,7 @@ async function requestAuthLink(input) {
         purpose,
         redirectTo,
         redirectUrl,
-        actionLink
+        actionLink: resolvedActionLink
     };
 }
 
@@ -195,6 +214,7 @@ module.exports = {
     sanitizeRedirectPath,
     buildProxyEmail,
     buildVerifyRedirectUrl,
+    buildDirectVerifyUrl,
     ensureAuthUserEmail,
     requestAuthLink
 };

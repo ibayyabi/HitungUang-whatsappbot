@@ -1,5 +1,7 @@
-const TelegramBot = require('node-telegram-bot-api');
+const http = require('http');
+const { URL } = require('url');
 const { handleMessage } = require('./handlers/messageHandler');
+const fonnteService = require('./services/fonnteService');
 const RateLimiter = require('./utils/rateLimiter');
 const logger = require('./utils/logger');
 const dotenv = require('dotenv');
@@ -7,122 +9,232 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const limiter = new RateLimiter(10, 60000);
-const token = process.env.TELEGRAM_BOT_TOKEN;
+const port = Number(process.env.PORT || process.env.BOT_PORT || 3001);
+const webhookPath = process.env.FONNTE_WEBHOOK_PATH || '/webhook/fonnte';
+const connectWebhookPath = process.env.FONNTE_CONNECT_WEBHOOK_PATH || '/webhook/fonnte/connect';
+const messageStatusWebhookPath = process.env.FONNTE_MESSAGE_STATUS_WEBHOOK_PATH || '/webhook/fonnte/message-status';
+const webhookSecret = process.env.FONNTE_WEBHOOK_SECRET || '';
+const publicWebhookUrl = process.env.FONNTE_PUBLIC_WEBHOOK_URL || '';
 
-let bot;
+function normalizePhone(value) {
+    return String(value || '').replace(/[^\d]/g, '');
+}
 
-function getTelegramFileId(msg) {
-    if (Array.isArray(msg.photo) && msg.photo.length > 0) {
-        return msg.photo[msg.photo.length - 1].file_id;
+function pickFirstString(...values) {
+    for (const value of values) {
+        if (typeof value === 'string' && value.trim()) {
+            return value.trim();
+        }
     }
 
-    if (msg.voice) return msg.voice.file_id;
-    if (msg.audio) return msg.audio.file_id;
-    if (msg.document) return msg.document.file_id;
-
-    return null;
+    return '';
 }
 
-function getMediaType(msg) {
-    if (Array.isArray(msg.photo) && msg.photo.length > 0) return 'image';
-    if (msg.voice) return 'voice';
-    if (msg.audio) return 'audio';
-    if (msg.document) return 'document';
-    return 'text';
+function getIncomingText(payload) {
+    return pickFirstString(
+        payload.message,
+        payload.text,
+        payload.body,
+        payload.caption,
+        payload.content,
+        payload.quoted_message
+    );
 }
 
-function inferMimeType(msg, filePath) {
-    if (Array.isArray(msg.photo) && msg.photo.length > 0) return 'image/jpeg';
-    if (msg.voice) return msg.voice.mime_type || 'audio/ogg';
-    if (msg.audio) return msg.audio.mime_type || 'audio/mpeg';
-    if (msg.document && msg.document.mime_type) return msg.document.mime_type;
+function getSenderId(payload) {
+    return normalizePhone(pickFirstString(
+        payload.sender,
+        payload.from,
+        payload.number,
+        payload.whatsapp,
+        payload.target,
+        payload.phone
+    ));
+}
 
-    const lowered = String(filePath || '').toLowerCase();
-    if (lowered.endsWith('.png')) return 'image/png';
-    if (lowered.endsWith('.webp')) return 'image/webp';
-    if (lowered.endsWith('.jpg') || lowered.endsWith('.jpeg')) return 'image/jpeg';
-    if (lowered.endsWith('.ogg')) return 'audio/ogg';
-    if (lowered.endsWith('.mp3')) return 'audio/mpeg';
-    if (lowered.endsWith('.m4a')) return 'audio/mp4';
+function getMediaUrl(payload) {
+    return pickFirstString(
+        payload.url,
+        payload.media,
+        payload.media_url,
+        payload.file,
+        payload.file_url,
+        payload.attachment
+    );
+}
+
+function inferMediaType(payload, mediaUrl) {
+    const explicitType = pickFirstString(payload.type, payload.message_type, payload.media_type).toLowerCase();
+    if (['image', 'photo', 'picture'].includes(explicitType)) return 'image';
+    if (['audio', 'voice', 'ptt'].includes(explicitType)) return 'audio';
+
+    const loweredUrl = String(mediaUrl || '').toLowerCase();
+    if (/\.(png|jpe?g|webp)(\?|$)/.test(loweredUrl)) return 'image';
+    if (/\.(ogg|mp3|m4a|wav|mpeg)(\?|$)/.test(loweredUrl)) return 'audio';
+
+    return mediaUrl ? 'document' : 'text';
+}
+
+function inferMimeType(response, mediaUrl, mediaType) {
+    const contentType = response.headers.get('content-type');
+    if (contentType) return contentType.split(';')[0];
+
+    const loweredUrl = String(mediaUrl || '').toLowerCase();
+    if (loweredUrl.includes('.png')) return 'image/png';
+    if (loweredUrl.includes('.webp')) return 'image/webp';
+    if (loweredUrl.includes('.jpg') || loweredUrl.includes('.jpeg')) return 'image/jpeg';
+    if (loweredUrl.includes('.ogg')) return 'audio/ogg';
+    if (loweredUrl.includes('.mp3')) return 'audio/mpeg';
+    if (loweredUrl.includes('.m4a')) return 'audio/mp4';
+
+    if (mediaType === 'image') return 'image/jpeg';
+    if (mediaType === 'audio' || mediaType === 'voice') return 'audio/mpeg';
 
     return 'application/octet-stream';
 }
 
-async function downloadTelegramMedia(msg) {
-    const fileId = getTelegramFileId(msg);
-
-    if (!fileId) {
-        throw new Error('Telegram file_id tidak ditemukan.');
-    }
-
-    const file = await bot.getFile(fileId);
-    const fileUrl = await bot.getFileLink(fileId);
-    const response = await fetch(fileUrl);
+async function downloadFonnteMedia(mediaUrl, mediaType) {
+    const response = await fetch(mediaUrl);
 
     if (!response.ok) {
-        throw new Error(`Gagal download file Telegram: ${response.status}`);
+        throw new Error(`Gagal download media WhatsApp: ${response.status}`);
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());
 
     return {
-        mimetype: inferMimeType(msg, file.file_path),
+        mimetype: inferMimeType(response, mediaUrl, mediaType),
         data: buffer.toString('base64'),
-        filename: msg.document?.file_name || file.file_path || fileId
+        filename: mediaUrl.split('/').pop() || 'whatsapp-media'
     };
 }
 
-function createMessageAdapter(msg) {
-    const senderId = String(msg.from.id);
-    const chatId = String(msg.chat.id);
-    const text = msg.text || msg.caption || '';
-    const mediaType = getMediaType(msg);
+function createMessageAdapter(payload) {
+    const senderId = getSenderId(payload);
+    const mediaUrl = getMediaUrl(payload);
+    const mediaType = inferMediaType(payload, mediaUrl);
+    const inboxId = payload.inboxid || payload.inbox_id || payload.id || 0;
 
     return {
-        text,
-        hasMedia: mediaType !== 'text',
+        text: getIncomingText(payload),
+        hasMedia: Boolean(mediaUrl),
         mediaType,
         senderId,
-        chatId,
-        chatType: msg.chat.type,
-        displayName: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' '),
-        username: msg.from.username || '',
-        reply: (replyText) => bot.sendMessage(chatId, replyText),
-        downloadMedia: () => downloadTelegramMedia(msg)
+        chatId: senderId,
+        chatType: 'private',
+        displayName: pickFirstString(payload.name, payload.sender_name, payload.pushname, payload.profile_name),
+        username: '',
+        reply: (replyText) => fonnteService.sendMessage({
+            target: senderId,
+            message: replyText,
+            inboxId
+        }),
+        downloadMedia: () => downloadFonnteMedia(mediaUrl, mediaType)
     };
 }
 
-async function processMessage(msg) {
-    if (!msg.from || msg.from.is_bot) {
-        return;
+async function parseRequestBody(request) {
+    const chunks = [];
+
+    for await (const chunk of request) {
+        chunks.push(chunk);
     }
 
-    if (msg.chat.type !== 'private') {
-        logger.info(`Mengabaikan chat Telegram non-private: ${msg.chat.id}`);
-        return;
+    const raw = Buffer.concat(chunks).toString('utf8');
+    if (!raw) return {};
+
+    const contentType = request.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+        return JSON.parse(raw);
     }
 
-    const sender = String(msg.from.id);
-
-    if (limiter.isRateLimited(sender)) {
-        logger.warn(`Rate limit terlampaui untuk Telegram user ${sender}`);
-        await bot.sendMessage(msg.chat.id, '⚠️ Anda mengirim pesan terlalu cepat. Silakan tunggu sebentar.');
-        return;
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+        return Object.fromEntries(new URLSearchParams(raw));
     }
 
-    await handleMessage(createMessageAdapter(msg));
-}
-
-async function safelyProcessMessage(msg) {
     try {
-        await processMessage(msg);
-    } catch (error) {
-        logger.error(`Gagal memproses pesan Telegram: ${error.stack || error.message}`);
-        if (msg.chat && msg.chat.id) {
-            await bot.sendMessage(msg.chat.id, 'Maaf, terjadi error saat memproses pesan Anda.');
-        }
+        return JSON.parse(raw);
+    } catch {
+        return Object.fromEntries(new URLSearchParams(raw));
     }
 }
+
+function sendJson(response, statusCode, payload) {
+    response.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify(payload));
+}
+
+function isAuthorized(requestUrl, request) {
+    if (!webhookSecret) return true;
+
+    const headerSecret = request.headers['x-webhook-secret'];
+    const querySecret = requestUrl.searchParams.get('secret');
+
+    return headerSecret === webhookSecret || querySecret === webhookSecret;
+}
+
+async function processWebhook(request, response, requestUrl) {
+    if (!isAuthorized(requestUrl, request)) {
+        return sendJson(response, 401, { success: false, message: 'Unauthorized webhook.' });
+    }
+
+    const payload = await parseRequestBody(request);
+    const message = createMessageAdapter(payload);
+
+    if (!message.senderId) {
+        logger.warn(`Webhook Fonnte tanpa sender valid: ${JSON.stringify(payload)}`);
+        return sendJson(response, 400, { success: false, message: 'Sender WhatsApp tidak valid.' });
+    }
+
+    if (limiter.isRateLimited(message.senderId)) {
+        logger.warn(`Rate limit terlampaui untuk WhatsApp user ${message.senderId}`);
+        await message.reply('⚠️ Anda mengirim pesan terlalu cepat. Silakan tunggu sebentar.');
+        return sendJson(response, 429, { success: false, message: 'Rate limited.' });
+    }
+
+    await handleMessage(message);
+    return sendJson(response, 200, { success: true });
+}
+
+async function processEventWebhook(request, response, requestUrl, eventName) {
+    if (!isAuthorized(requestUrl, request)) {
+        return sendJson(response, 401, { success: false, message: 'Unauthorized webhook.' });
+    }
+
+    const payload = await parseRequestBody(request);
+    logger.info(`Webhook Fonnte ${eventName}: ${JSON.stringify(payload)}`);
+    return sendJson(response, 200, { success: true });
+}
+
+const server = http.createServer(async (request, response) => {
+    try {
+        const requestUrl = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+
+        if (request.method === 'GET' && requestUrl.pathname === '/health') {
+            return sendJson(response, 200, { status: 'ok', platform: 'whatsapp-fonnte' });
+        }
+
+        if (request.method === 'POST' && requestUrl.pathname === webhookPath) {
+            return await processWebhook(request, response, requestUrl);
+        }
+
+        if (request.method === 'POST' && requestUrl.pathname === connectWebhookPath) {
+            return await processEventWebhook(request, response, requestUrl, 'connect');
+        }
+
+        if (request.method === 'POST' && requestUrl.pathname === messageStatusWebhookPath) {
+            return await processEventWebhook(request, response, requestUrl, 'message-status');
+        }
+
+        return sendJson(response, 404, {
+            success: false,
+            message: `Endpoint tidak ditemukan. Gunakan POST ${webhookPath}.`
+        });
+    } catch (error) {
+        logger.error(`Gagal memproses webhook Fonnte: ${error.stack || error.message}`);
+        return sendJson(response, 500, { success: false, message: 'Internal server error.' });
+    }
+});
 
 process.on('unhandledRejection', (reason) => {
     const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
@@ -133,43 +245,29 @@ process.on('uncaughtException', (error) => {
     logger.error(`Uncaught exception: ${error.stack || error.message}`);
 });
 
-async function bootstrap() {
-    if (!token) {
-        logger.error('TELEGRAM_BOT_TOKEN belum diset.');
-        process.exit(1);
+server.listen(port, () => {
+    logger.info(`Webhook WhatsApp Fonnte siap di port ${port}, path ${webhookPath}.`);
+    const localWebhookUrl = `http://localhost:${port}${webhookPath}`;
+    console.log(`Webhook WhatsApp Fonnte siap: ${publicWebhookUrl || localWebhookUrl}`);
+    if (!publicWebhookUrl) {
+        console.log(`Set FONNTE_PUBLIC_WEBHOOK_URL untuk menampilkan URL publik yang dipakai Fonnte.`);
     }
+});
 
-    bot = new TelegramBot(token, { polling: true });
-    bot.on('message', safelyProcessMessage);
-    bot.on('polling_error', (error) => {
-        logger.error(`Telegram polling error: ${error.message}`);
-    });
-
-    logger.info('Bot Telegram long polling siap.');
-    console.log('Bot Telegram long polling siap.');
-}
-
-const shutdown = async () => {
-    logger.info('Menghentikan bot Telegram...');
-    try {
-        if (bot) {
-            await bot.stopPolling();
-        }
-        logger.info('Bot Telegram berhasil dihentikan.');
+const shutdown = () => {
+    logger.info('Menghentikan webhook WhatsApp Fonnte...');
+    server.close(() => {
+        logger.info('Webhook WhatsApp Fonnte berhasil dihentikan.');
         process.exit(0);
-    } catch (err) {
-        logger.error(`Error saat shutdown: ${err.message}`);
-        process.exit(1);
-    }
+    });
 };
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-bootstrap();
-
 module.exports = {
     createMessageAdapter,
-    getMediaType,
-    inferMimeType
+    getIncomingText,
+    getSenderId,
+    inferMediaType
 };

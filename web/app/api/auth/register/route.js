@@ -47,7 +47,7 @@ export async function POST(request) {
 
         if (authError) {
             if (authError.message.includes('already registered')) {
-                return Response.json({ success: false, message: 'Akun Telegram sudah terdaftar. Silakan login.' }, { status: 400 });
+                return Response.json({ success: false, message: 'Nomor WhatsApp sudah terdaftar. Silakan login.' }, { status: 400 });
             }
             throw authError;
         }
@@ -68,7 +68,7 @@ export async function POST(request) {
 
         return Response.json({ 
             success: true, 
-            message: 'Registrasi berhasil! Silakan kembali ke Telegram untuk mulai mencatat, atau login ke Dashboard.' 
+            message: 'Registrasi berhasil! Silakan kembali ke WhatsApp untuk mulai mencatat, atau login ke Dashboard.' 
         });
 
     } catch (error) {

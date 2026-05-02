@@ -17,12 +17,20 @@ function VerifyContent() {
             const nextPath = searchParams.get('next') || '/dashboard';
             const safeNextPath = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/dashboard';
             const code = searchParams.get('code');
+            const tokenHash = searchParams.get('token_hash');
+            const tokenType = searchParams.get('type') || 'magiclink';
             const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
             const accessToken = hashParams.get('access_token');
             const refreshToken = hashParams.get('refresh_token');
 
             try {
-                if (code) {
+                if (tokenHash) {
+                    const { error } = await supabase.auth.verifyOtp({
+                        token_hash: tokenHash,
+                        type: tokenType
+                    });
+                    if (error) throw error;
+                } else if (code) {
                     const { error } = await supabase.auth.exchangeCodeForSession(code);
                     if (error) throw error;
                 } else if (accessToken && refreshToken) {

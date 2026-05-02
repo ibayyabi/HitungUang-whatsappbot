@@ -12,7 +12,7 @@ function RegisterContent() {
     const [status, setStatus] = useState({ loading: false, message: '', isError: false });
 
     useEffect(() => {
-        const userId = searchParams.get('telegram_user_id');
+        const userId = searchParams.get('whatsapp') || searchParams.get('telegram_user_id');
         const chatId = searchParams.get('chat_id');
         const username = searchParams.get('username');
 
@@ -56,7 +56,7 @@ function RegisterContent() {
 
             <form className="stack-form" onSubmit={handleSubmit}>
                 <div className="field">
-                    <span>Telegram User ID</span>
+                    <span>Nomor WhatsApp</span>
                     <input type="text" value={telegramUserId} readOnly style={{ backgroundColor: 'var(--bg-secondary)', opacity: 0.7 }} />
                 </div>
                 <div className="field">
