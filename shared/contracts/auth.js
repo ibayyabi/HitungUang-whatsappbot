@@ -4,7 +4,7 @@ const AUTH_TOKEN_PURPOSES = [
 ];
 
 const AUTH_REQUEST_FIELDS = [
-    'whatsapp_number',
+    'telegram_user_id',
     'purpose',
     'redirect_to'
 ];

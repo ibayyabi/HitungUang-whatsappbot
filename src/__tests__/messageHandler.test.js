@@ -6,7 +6,7 @@ jest.mock('../services/aiParser', () => ({
 }));
 
 jest.mock('../services/dbService', () => ({
-    getUserByWhatsapp: jest.fn(),
+    getUserByTelegramId: jest.fn(),
     appendTransactions: jest.fn(),
     supabase: {}
 }));
@@ -31,20 +31,25 @@ const dbService = require('../services/dbService');
 const nl2sqlService = require('../services/nl2sqlService');
 const { handleMessage } = require('../handlers/messageHandler');
 
-function createMessage(body) {
+function createMessage(text, overrides = {}) {
     return {
-        body,
+        text,
         hasMedia: false,
-        type: 'chat',
-        getContact: jest.fn().mockResolvedValue({ number: '628123' }),
-        reply: jest.fn().mockResolvedValue()
+        mediaType: 'text',
+        senderId: '12345',
+        chatId: '12345',
+        chatType: 'private',
+        displayName: 'Ikhbar',
+        username: 'ikhbar',
+        reply: jest.fn().mockResolvedValue(),
+        ...overrides
     };
 }
 
 describe('handleMessage', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        dbService.getUserByWhatsapp.mockResolvedValue({ id: 'user-1' });
+        dbService.getUserByTelegramId.mockResolvedValue({ id: 'user-1', display_name: 'Ikhbar' });
         dbService.appendTransactions.mockResolvedValue({ success: true, insertedCount: 1 });
         authLinkService.requestAuthLink.mockResolvedValue({
             actionLink: 'https://supabase.test/magic'
@@ -64,6 +69,10 @@ describe('handleMessage', () => {
 
         expect(nl2sqlService.processNLQuery).not.toHaveBeenCalled();
         expect(dbService.appendTransactions).toHaveBeenCalledTimes(1);
+        expect(dbService.appendTransactions).toHaveBeenCalledWith([expect.objectContaining({
+            telegramUserId: '12345',
+            userId: 'user-1'
+        })]);
         expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('Berhasil Dicatat'));
     });
 
@@ -73,7 +82,7 @@ describe('handleMessage', () => {
 
         await handleMessage(msg);
 
-        expect(nl2sqlService.processNLQuery).toHaveBeenCalledWith(msg, '628123', { id: 'user-1' });
+        expect(nl2sqlService.processNLQuery).toHaveBeenCalledWith(msg, '12345', { id: 'user-1', display_name: 'Ikhbar' });
         expect(dbService.appendTransactions).not.toHaveBeenCalled();
         expect(msg.reply).toHaveBeenCalledWith('ringkasan');
     });
@@ -98,16 +107,87 @@ describe('handleMessage', () => {
         expect(msg.reply).toHaveBeenCalledWith('⚠️ Catatan ini sudah pernah tersimpan sebelumnya, jadi saya tidak mencatat duplikat.');
     });
     test('mengirim magic link ketika user meminta dashboard', async () => {
-        const msg = createMessage('akses dashboard');
+        const msg = createMessage('/dashboard');
 
         await handleMessage(msg);
 
         expect(authLinkService.requestAuthLink).toHaveBeenCalledWith({
-            whatsappNumber: '628123',
+            telegramUserId: '12345',
             purpose: 'login_web',
             redirectTo: '/dashboard'
         });
         expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('https://supabase.test/magic'));
         expect(dbService.appendTransactions).not.toHaveBeenCalled();
+    });
+
+    test('mengirim link register untuk Telegram user belum terdaftar', async () => {
+        dbService.getUserByTelegramId.mockResolvedValue(null);
+        const msg = createMessage('/start');
+
+        await handleMessage(msg);
+
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('/register?telegram_user_id=12345'));
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('chat_id=12345'));
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('username=ikhbar'));
+    });
+
+    test('memproses photo Telegram dengan parseImage', async () => {
+        const msg = createMessage('struk', {
+            hasMedia: true,
+            mediaType: 'image',
+            downloadMedia: jest.fn().mockResolvedValue({
+                mimetype: 'image/jpeg',
+                data: Buffer.from('image').toString('base64')
+            })
+        });
+        aiParser.parseImage.mockResolvedValue({
+            item: 'Kopi',
+            harga: 20000,
+            kategori: 'makan',
+            tipe: 'pengeluaran'
+        });
+
+        await handleMessage(msg);
+
+        expect(aiParser.parseImage).toHaveBeenCalledWith(expect.objectContaining({
+            mimetype: 'image/jpeg'
+        }));
+        expect(dbService.appendTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    test('memproses voice Telegram dengan parseAudio', async () => {
+        const msg = createMessage('', {
+            hasMedia: true,
+            mediaType: 'voice',
+            downloadMedia: jest.fn().mockResolvedValue({
+                mimetype: 'audio/ogg',
+                data: Buffer.from('audio').toString('base64')
+            })
+        });
+        aiParser.parseAudio.mockResolvedValue({
+            item: 'Bakso',
+            harga: 15000,
+            kategori: 'makan',
+            tipe: 'pengeluaran'
+        });
+
+        await handleMessage(msg);
+
+        expect(aiParser.parseAudio).toHaveBeenCalledWith(expect.objectContaining({
+            mimetype: 'audio/ogg'
+        }));
+        expect(dbService.appendTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    test('mengabaikan pesan group', async () => {
+        const msg = createMessage('Bakso 15rb', {
+            chatType: 'group'
+        });
+
+        await handleMessage(msg);
+
+        expect(dbService.getUserByTelegramId).not.toHaveBeenCalled();
+        expect(dbService.appendTransactions).not.toHaveBeenCalled();
+        expect(msg.reply).not.toHaveBeenCalled();
     });
 });

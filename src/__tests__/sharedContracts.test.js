@@ -27,14 +27,14 @@ describe('shared contracts', () => {
     });
 
     test('mendefinisikan field profile dan transaction untuk referensi lintas app', () => {
-        expect(PROFILE_FIELDS).toEqual(['id', 'whatsapp_number', 'display_name', 'created_at']);
+        expect(PROFILE_FIELDS).toEqual(['id', 'telegram_user_id', 'telegram_chat_id', 'telegram_username', 'display_name', 'created_at']);
         expect(TRANSACTION_FIELDS.database).toContain('catatan_asli');
-        expect(TRANSACTION_FIELDS.input).toContain('whatsappNumber');
+        expect(TRANSACTION_FIELDS.input).toContain('telegramUserId');
     });
 
     test('mendefinisikan kontrak auth untuk magic link', () => {
         expect(AUTH_TOKEN_PURPOSES).toEqual(['login_web', 'summary_link']);
-        expect(AUTH_REQUEST_FIELDS).toContain('whatsapp_number');
+        expect(AUTH_REQUEST_FIELDS).toContain('telegram_user_id');
         expect(AUTH_VERIFY_FIELDS).toContain('token');
         expect(isValidAuthPurpose('login_web')).toBe(true);
         expect(isValidAuthPurpose('dashboard')).toBe(false);

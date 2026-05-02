@@ -1,8 +1,9 @@
+import { Suspense } from 'react';
 import LoginRequestForm from './LoginRequestForm';
 
 export const metadata = {
     title: 'Masuk | HitungUang',
-    description: 'Masuk ke dashboard HitungUang melalui magic link WhatsApp.'
+    description: 'Masuk ke dashboard HitungUang melalui magic link Telegram.'
 };
 
 export default function LoginPage() {
@@ -17,15 +18,17 @@ export default function LoginPage() {
                 <span className="eyebrow">Akses Aman</span>
                 <h1 style={{ fontSize: '3rem' }}>Selamat Datang Kembali.</h1>
                 <p className="lead" style={{ marginBottom: '2.5rem' }}>
-                    Kami akan mengirimkan tautan masuk rahasia ke nomor WhatsApp Anda. 
-                    Tanpa password, tanpa ribet.
+                    Masuk memakai Telegram User ID atau nama yang sama seperti saat pendaftaran.
+                    Jika datang dari bot, data akun akan diisi otomatis bila tersedia di tautan.
                 </p>
 
-                <LoginRequestForm />
+                <Suspense fallback={<p>Memuat form masuk...</p>}>
+                    <LoginRequestForm />
+                </Suspense>
 
                 <div style={{ marginTop: '3rem', borderTop: '1px solid var(--border)', paddingTop: '2rem' }}>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                        Belum punya akun? <a href="https://wa.me/your-bot-number" style={{ color: 'var(--accent)', fontWeight: '700', textDecoration: 'none' }}>Daftar via WhatsApp</a>
+                        Belum punya akun? Buka bot Telegram dan kirim /start.
                     </p>
                 </div>
             </section>

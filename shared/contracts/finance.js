@@ -43,7 +43,7 @@ const TRANSACTION_FIELDS = {
         'lokasi',
         'rawText',
         'tipe',
-        'whatsappNumber',
+        'telegramUserId',
         'userId'
     ]
 };

@@ -5,13 +5,20 @@ import { useSearchParams } from 'next/navigation';
 
 function RegisterContent() {
     const searchParams = useSearchParams();
-    const [whatsapp, setWhatsapp] = useState('');
+    const [telegramUserId, setTelegramUserId] = useState('');
+    const [telegramChatId, setTelegramChatId] = useState('');
+    const [telegramUsername, setTelegramUsername] = useState('');
     const [name, setName] = useState('');
     const [status, setStatus] = useState({ loading: false, message: '', isError: false });
 
     useEffect(() => {
-        const wa = searchParams.get('whatsapp');
-        if (wa) setWhatsapp(wa);
+        const userId = searchParams.get('telegram_user_id');
+        const chatId = searchParams.get('chat_id');
+        const username = searchParams.get('username');
+
+        if (userId) setTelegramUserId(userId);
+        if (chatId) setTelegramChatId(chatId);
+        if (username) setTelegramUsername(username);
     }, [searchParams]);
 
     const handleSubmit = async (e) => {
@@ -22,7 +29,12 @@ function RegisterContent() {
             const res = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ whatsapp_number: whatsapp, display_name: name })
+                body: JSON.stringify({
+                    telegram_user_id: telegramUserId,
+                    telegram_chat_id: telegramChatId,
+                    telegram_username: telegramUsername,
+                    display_name: name
+                })
             });
             const data = await res.json();
 
@@ -44,8 +56,8 @@ function RegisterContent() {
 
             <form className="stack-form" onSubmit={handleSubmit}>
                 <div className="field">
-                    <span>Nomor WhatsApp</span>
-                    <input type="text" value={whatsapp} readOnly style={{ backgroundColor: 'var(--bg-secondary)', opacity: 0.7 }} />
+                    <span>Telegram User ID</span>
+                    <input type="text" value={telegramUserId} readOnly style={{ backgroundColor: 'var(--bg-secondary)', opacity: 0.7 }} />
                 </div>
                 <div className="field">
                     <span>Nama Tampilan</span>
@@ -58,7 +70,7 @@ function RegisterContent() {
                         autoFocus
                     />
                 </div>
-                <button type="submit" disabled={status.loading || !name}>
+                <button type="submit" disabled={status.loading || !name || !telegramUserId}>
                     {status.loading ? 'Mendaftarkan...' : 'Selesaikan Pendaftaran'}
                 </button>
             </form>

@@ -1,5 +1,4 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const TelegramBot = require('node-telegram-bot-api');
 const { handleMessage } = require('./handlers/messageHandler');
 const RateLimiter = require('./utils/rateLimiter');
 const logger = require('./utils/logger');
@@ -7,107 +6,121 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-// Batasi 10 pesan per menit per user
 const limiter = new RateLimiter(10, 60000);
+const token = process.env.TELEGRAM_BOT_TOKEN;
 
+let bot;
 
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process',
-            '--disable-gpu'
-        ]
+function getTelegramFileId(msg) {
+    if (Array.isArray(msg.photo) && msg.photo.length > 0) {
+        return msg.photo[msg.photo.length - 1].file_id;
     }
-});
 
-client.on('loading_screen', (percent, message) => {
-    console.log(`🔄 Sedang memuat WhatsApp: ${percent}% - ${message}`);
-});
+    if (msg.voice) return msg.voice.file_id;
+    if (msg.audio) return msg.audio.file_id;
+    if (msg.document) return msg.document.file_id;
 
-client.on('authenticated', () => {
-    console.log('✅ Autentikasi Berhasil!');
-    logger.info('WhatsApp Client authenticated');
-});
+    return null;
+}
 
-client.on('qr', (qr) => {
-    console.log('\n--- SCAN QR CODE INI DENGAN WHATSAPP KAMU ---\n');
-    qrcode.generate(qr, { small: true });
-    logger.info('QR Code di-generate, menunggu scan...');
-});
+function getMediaType(msg) {
+    if (Array.isArray(msg.photo) && msg.photo.length > 0) return 'image';
+    if (msg.voice) return 'voice';
+    if (msg.audio) return 'audio';
+    if (msg.document) return 'document';
+    return 'text';
+}
 
-client.on('ready', () => {
-    console.log('\n Bot HitungUang SIAP!');
-    logger.info('Bot WhatsApp Ready');
-});
+function inferMimeType(msg, filePath) {
+    if (Array.isArray(msg.photo) && msg.photo.length > 0) return 'image/jpeg';
+    if (msg.voice) return msg.voice.mime_type || 'audio/ogg';
+    if (msg.audio) return msg.audio.mime_type || 'audio/mpeg';
+    if (msg.document && msg.document.mime_type) return msg.document.mime_type;
 
-client.on('message_create', async (msg) => {
-    // Proses semua pesan (baik masuk maupun keluar) melalui satu pintu
-    // safelyProcessMessage sudah memanggil processMessage yang memfilter bot signatures
-    const source = msg.fromMe ? 'sent_message' : 'incoming_message';
-    await safelyProcessMessage(msg, source);
-});
+    const lowered = String(filePath || '').toLowerCase();
+    if (lowered.endsWith('.png')) return 'image/png';
+    if (lowered.endsWith('.webp')) return 'image/webp';
+    if (lowered.endsWith('.jpg') || lowered.endsWith('.jpeg')) return 'image/jpeg';
+    if (lowered.endsWith('.ogg')) return 'audio/ogg';
+    if (lowered.endsWith('.mp3')) return 'audio/mpeg';
+    if (lowered.endsWith('.m4a')) return 'audio/mp4';
 
-client.on('auth_failure', (message) => {
-    logger.error(`Auth failure WhatsApp Client: ${message}`);
-});
+    return 'application/octet-stream';
+}
 
-client.on('disconnected', (reason) => {
-    logger.warn(`WhatsApp Client disconnected: ${reason}`);
-});
+async function downloadTelegramMedia(msg) {
+    const fileId = getTelegramFileId(msg);
 
-client.on('change_state', (state) => {
-    logger.info(`WhatsApp Client state changed: ${state}`);
-});
+    if (!fileId) {
+        throw new Error('Telegram file_id tidak ditemukan.');
+    }
+
+    const file = await bot.getFile(fileId);
+    const fileUrl = await bot.getFileLink(fileId);
+    const response = await fetch(fileUrl);
+
+    if (!response.ok) {
+        throw new Error(`Gagal download file Telegram: ${response.status}`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    return {
+        mimetype: inferMimeType(msg, file.file_path),
+        data: buffer.toString('base64'),
+        filename: msg.document?.file_name || file.file_path || fileId
+    };
+}
+
+function createMessageAdapter(msg) {
+    const senderId = String(msg.from.id);
+    const chatId = String(msg.chat.id);
+    const text = msg.text || msg.caption || '';
+    const mediaType = getMediaType(msg);
+
+    return {
+        text,
+        hasMedia: mediaType !== 'text',
+        mediaType,
+        senderId,
+        chatId,
+        chatType: msg.chat.type,
+        displayName: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' '),
+        username: msg.from.username || '',
+        reply: (replyText) => bot.sendMessage(chatId, replyText),
+        downloadMedia: () => downloadTelegramMedia(msg)
+    };
+}
 
 async function processMessage(msg) {
-    if (msg.id.remote.endsWith('@g.us')) return;
-
-    const text = msg.body;
-    const botSignatures = [
-        '✅ *Berhasil Dicatat!*',
-        '📊 *Hasil Analisa AI*',
-        'Halo! 👋 Saya *HitungUang Bot*',
-        '⚠️ *Nomor Anda belum terhubung*',
-        'Ini link masuk Dashboard CuanBeres Anda:',
-        '❌ Maaf, saya gagal'
-    ];
-
-    if (botSignatures.some(sig => text.includes(sig))) {
+    if (!msg.from || msg.from.is_bot) {
         return;
     }
 
-    // const allowedNumbers = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',') : [];
-
-    const contact = await msg.getContact();
-    const sender = contact.number;
-
-    // Cek Rate Limit (Anti-Flood)
-    if (limiter.isRateLimited(sender)) {
-        logger.warn(`Rate limit terlampaui untuk ${sender}`);
-        return await msg.reply('⚠️ Anda mengirim pesan terlalu cepat. Silakan tunggu sebentar.');
+    if (msg.chat.type !== 'private') {
+        logger.info(`Mengabaikan chat Telegram non-private: ${msg.chat.id}`);
+        return;
     }
 
-    // if (allowedNumbers.length > 0 && !allowedNumbers.includes(sender)) {
-    //     return;
-    // }
+    const sender = String(msg.from.id);
 
-    // 4. Jalankan handler
-    await handleMessage(msg);
+    if (limiter.isRateLimited(sender)) {
+        logger.warn(`Rate limit terlampaui untuk Telegram user ${sender}`);
+        await bot.sendMessage(msg.chat.id, '⚠️ Anda mengirim pesan terlalu cepat. Silakan tunggu sebentar.');
+        return;
+    }
+
+    await handleMessage(createMessageAdapter(msg));
 }
 
-async function safelyProcessMessage(msg, source) {
+async function safelyProcessMessage(msg) {
     try {
         await processMessage(msg);
     } catch (error) {
-        logger.error(`Gagal memproses event ${source}: ${error.message}`);
+        logger.error(`Gagal memproses pesan Telegram: ${error.stack || error.message}`);
+        if (msg.chat && msg.chat.id) {
+            await bot.sendMessage(msg.chat.id, 'Maaf, terjadi error saat memproses pesan Anda.');
+        }
     }
 }
 
@@ -121,21 +134,28 @@ process.on('uncaughtException', (error) => {
 });
 
 async function bootstrap() {
-    try {
-        console.log('Sedang memulai WhatsApp Client...');
-        await client.initialize();
-    } catch (error) {
-        logger.error(`Gagal initialize WhatsApp Client: ${error.stack || error.message}`);
+    if (!token) {
+        logger.error('TELEGRAM_BOT_TOKEN belum diset.');
         process.exit(1);
     }
+
+    bot = new TelegramBot(token, { polling: true });
+    bot.on('message', safelyProcessMessage);
+    bot.on('polling_error', (error) => {
+        logger.error(`Telegram polling error: ${error.message}`);
+    });
+
+    logger.info('Bot Telegram long polling siap.');
+    console.log('Bot Telegram long polling siap.');
 }
 
-// Tangani penghentian proses agar tidak ada zombie chrome
 const shutdown = async () => {
-    logger.info('Menghentikan bot...');
+    logger.info('Menghentikan bot Telegram...');
     try {
-        await client.destroy();
-        logger.info('Bot berhasil dihentikan.');
+        if (bot) {
+            await bot.stopPolling();
+        }
+        logger.info('Bot Telegram berhasil dihentikan.');
         process.exit(0);
     } catch (err) {
         logger.error(`Error saat shutdown: ${err.message}`);
@@ -147,3 +167,9 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 bootstrap();
+
+module.exports = {
+    createMessageAdapter,
+    getMediaType,
+    inferMimeType
+};

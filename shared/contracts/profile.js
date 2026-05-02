@@ -1,12 +1,16 @@
 const PROFILE_FIELDS = [
     'id',
-    'whatsapp_number',
+    'telegram_user_id',
+    'telegram_chat_id',
+    'telegram_username',
     'display_name',
     'created_at'
 ];
 
 const PROFILE_INPUT_FIELDS = [
-    'whatsapp_number',
+    'telegram_user_id',
+    'telegram_chat_id',
+    'telegram_username',
     'display_name'
 ];
 

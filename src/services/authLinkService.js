@@ -6,11 +6,15 @@ const DEFAULT_PURPOSE = 'login_web';
 const DEFAULT_REDIRECT_PATH = '/';
 const DEFAULT_PROXY_EMAIL_DOMAIN = 'auth.cuanberes.local';
 
-function normalizeWhatsappNumber(value) {
+function normalizeTelegramUserId(value) {
     return String(value || '').replace(/\D/g, '');
 }
 
-function maskWhatsappNumber(value) {
+function normalizeDisplayName(value) {
+    return String(value || '').trim();
+}
+
+function maskTelegramId(value) {
     if (!value) {
         return '';
     }
@@ -32,9 +36,9 @@ function sanitizeRedirectPath(value) {
     return normalized;
 }
 
-function buildProxyEmail(whatsappNumber) {
+function buildProxyEmail(telegramUserId) {
     const domain = process.env.AUTH_PROXY_EMAIL_DOMAIN || DEFAULT_PROXY_EMAIL_DOMAIN;
-    return `wa-${whatsappNumber}@${domain}`;
+    return `tg-${telegramUserId}@${domain}`;
 }
 
 function buildVerifyRedirectUrl({ purpose, redirectTo }) {
@@ -58,7 +62,7 @@ async function ensureAuthUserEmail(profile) {
             if (error.status === 404 || error.code === 'user_not_found') {
                 logger.warn(`User orphan ditemukan untuk profile ${profile.id}, mencoba memulihkan...`);
                 
-                const proxyEmail = buildProxyEmail(profile.whatsapp_number);
+                const proxyEmail = buildProxyEmail(profile.telegram_user_id);
                 
                 // 1. Coba cari apakah ada user lain dengan email ini
                 const { data: usersData } = await dbService.supabase.auth.admin.listUsers();
@@ -69,14 +73,14 @@ async function ensureAuthUserEmail(profile) {
                     const { error: updateError } = await dbService.supabase
                         .from('profiles')
                         .update({ id: existingUser.id })
-                        .eq('whatsapp_number', profile.whatsapp_number);
+                        .eq('telegram_user_id', profile.telegram_user_id);
                         
                     if (updateError) throw updateError;
                     return existingUser.email;
                 }
                 
                 // 2. Jika benar-benar tidak ada di Auth, buat baru (ini akan butuh pendaftaran ulang via bot)
-                throw new Error('Akun autentikasi Anda tidak ditemukan. Silakan lakukan pendaftaran ulang via WhatsApp Bot.');
+                throw new Error('Akun autentikasi Anda tidak ditemukan. Silakan lakukan pendaftaran ulang via Telegram Bot.');
             }
             throw error;
         }
@@ -95,13 +99,15 @@ async function ensureAuthUserEmail(profile) {
         return authUser.email;
     }
 
-    const proxyEmail = buildProxyEmail(profile.whatsapp_number);
+    const proxyEmail = buildProxyEmail(profile.telegram_user_id);
     const updatePayload = {
         email: proxyEmail,
         email_confirm: true,
         user_metadata: {
             ...(authUser.user_metadata || {}),
-            whatsapp_number: profile.whatsapp_number
+            telegram_user_id: profile.telegram_user_id,
+            telegram_username: profile.telegram_username,
+            display_name: profile.display_name
         }
     };
 
@@ -115,22 +121,35 @@ async function ensureAuthUserEmail(profile) {
 }
 
 async function requestAuthLink(input) {
-    const whatsappNumber = normalizeWhatsappNumber(input && input.whatsappNumber);
+    const telegramUserId = normalizeTelegramUserId(input && input.telegramUserId);
+    const displayName = normalizeDisplayName(input && input.displayName);
     const purpose = String((input && input.purpose) || DEFAULT_PURPOSE).trim().toLowerCase();
     const redirectTo = sanitizeRedirectPath(input && input.redirectTo);
 
-    if (!whatsappNumber || whatsappNumber.length < 8) {
-        throw new Error('Nomor WhatsApp tidak valid.');
+    if (!telegramUserId && !displayName) {
+        throw new Error('Isi Telegram User ID atau nama terdaftar.');
     }
 
     if (!isValidAuthPurpose(purpose)) {
         throw new Error('Purpose auth tidak valid.');
     }
 
-    const profile = await dbService.getUserByWhatsapp(whatsappNumber);
+    let profile = null;
+
+    if (telegramUserId) {
+        profile = await dbService.getUserByTelegramId(telegramUserId);
+    } else {
+        const matches = await dbService.findUsersByDisplayName(displayName);
+
+        if (matches.length > 1) {
+            throw new Error('Nama terdaftar dipakai lebih dari satu akun. Gunakan Telegram User ID.');
+        }
+
+        profile = matches[0] || null;
+    }
 
     if (!profile) {
-        throw new Error('Nomor WhatsApp belum terdaftar.');
+        throw new Error('Akun belum terdaftar.');
     }
 
     const email = await ensureAuthUserEmail(profile);
@@ -154,12 +173,14 @@ async function requestAuthLink(input) {
         throw new Error('Supabase tidak mengembalikan action link.');
     }
 
-    logger.info(`Magic link ${purpose} dibuat untuk ${whatsappNumber}`);
+    const resolvedTelegramUserId = profile.telegram_user_id;
+
+    logger.info(`Magic link ${purpose} dibuat untuk Telegram user ${resolvedTelegramUserId}`);
 
     return {
         userId: profile.id,
-        whatsappNumber,
-        maskedWhatsappNumber: maskWhatsappNumber(whatsappNumber),
+        telegramUserId: resolvedTelegramUserId,
+        maskedTelegramId: maskTelegramId(resolvedTelegramUserId),
         purpose,
         redirectTo,
         redirectUrl,
@@ -168,8 +189,9 @@ async function requestAuthLink(input) {
 }
 
 module.exports = {
-    normalizeWhatsappNumber,
-    maskWhatsappNumber,
+    normalizeTelegramUserId,
+    normalizeDisplayName,
+    maskTelegramId,
     sanitizeRedirectPath,
     buildProxyEmail,
     buildVerifyRedirectUrl,

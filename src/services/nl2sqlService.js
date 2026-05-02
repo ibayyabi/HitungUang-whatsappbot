@@ -225,21 +225,21 @@ Pertanyaan user: "${cleanText}"
 /**
  * Service untuk memproses pertanyaan human language menjadi SQL (NL2SQL)
  */
-async function processNLQuery(message, whatsappNumber, user) {
-    const text = message.body;
+async function processNLQuery(message, telegramUserId, user) {
+    const text = message.text || message.body || '';
 
     try {
-        const registeredUser = user || await dbService.getUserByWhatsapp(whatsappNumber);
+        const registeredUser = user || await dbService.getUserByTelegramId(telegramUserId);
         const userId = registeredUser ? registeredUser.id : null;
 
         if (!userId) {
-            return "⚠️ Maaf, akun WhatsApp Anda belum terdaftar di Web App. Silakan daftar terlebih dahulu untuk menggunakan fitur tanya jawab.";
+            return "⚠️ Maaf, akun Telegram Anda belum terdaftar di Web App. Silakan daftar terlebih dahulu untuk menggunakan fitur tanya jawab.";
         }
 
         const cleanText = sanitizeInput(text);
         const sql = await generateSQL(cleanText, userId);
 
-        logger.info(`Generated SQL for ${whatsappNumber}: ${sql}`);
+        logger.info(`Generated SQL for Telegram user ${telegramUserId}: ${sql}`);
 
         if (!validateSQL(sql, userId)) {
             logger.error(`Invalid SQL from AI: ${sql}`);

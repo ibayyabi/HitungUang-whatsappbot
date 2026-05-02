@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 const INITIAL_STATE = {
-    whatsappNumber: '',
+    telegramUserId: '',
+    displayName: '',
     message: '',
     previewLink: '',
     isError: false,
@@ -11,7 +13,23 @@ const INITIAL_STATE = {
 };
 
 export default function LoginRequestForm() {
+    const searchParams = useSearchParams();
     const [state, setState] = useState(INITIAL_STATE);
+
+    useEffect(() => {
+        const telegramUserId = searchParams.get('telegram_user_id') || '';
+        const displayName = searchParams.get('display_name') || searchParams.get('name') || '';
+
+        if (!telegramUserId && !displayName) {
+            return;
+        }
+
+        setState((current) => ({
+            ...current,
+            telegramUserId,
+            displayName
+        }));
+    }, [searchParams]);
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -30,7 +48,8 @@ export default function LoginRequestForm() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    whatsapp_number: state.whatsappNumber,
+                    telegram_user_id: state.telegramUserId,
+                    display_name: state.displayName,
                     purpose: 'login_web',
                     redirect_to: '/dashboard'
                 })
@@ -45,7 +64,7 @@ export default function LoginRequestForm() {
                 ...current,
                 isLoading: false,
                 isError: false,
-                message: payload.message || 'Link berhasil dibuat. Silakan cek WhatsApp Anda.',
+                message: payload.message || 'Link masuk berhasil dibuat.',
                 previewLink: payload.preview_link || ''
             }));
         } catch (error) {
@@ -62,21 +81,33 @@ export default function LoginRequestForm() {
     return (
         <form className="stack-form" onSubmit={handleSubmit}>
             <div className="field">
-                <span>Nomor WhatsApp (dengan kode negara)</span>
+                <span>Telegram User ID</span>
                 <input
                     type="text"
-                    placeholder="Contoh: 628123456789"
-                    value={state.whatsappNumber}
+                    placeholder="Contoh: 123456789"
+                    value={state.telegramUserId}
                     onChange={(event) => setState((current) => ({
                         ...current,
-                        whatsappNumber: event.target.value
+                        telegramUserId: event.target.value
                     }))}
-                    autoComplete="tel"
-                    required
+                    inputMode="numeric"
+                />
+            </div>
+
+            <div className="field">
+                <span>Nama Terdaftar</span>
+                <input
+                    type="text"
+                    placeholder="Nama yang dipakai saat daftar"
+                    value={state.displayName}
+                    onChange={(event) => setState((current) => ({
+                        ...current,
+                        displayName: event.target.value
+                    }))}
                 />
             </div>
             
-            <button type="submit" disabled={state.isLoading}>
+            <button type="submit" disabled={state.isLoading || (!state.telegramUserId.trim() && !state.displayName.trim())}>
                 {state.isLoading ? 'Memproses...' : 'Kirim Magic Link'}
             </button>
 
@@ -89,7 +120,7 @@ export default function LoginRequestForm() {
             {state.previewLink ? (
                 <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
                     <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                        Mode Developer:
+                        Tautan langsung:
                     </p>
                     <a 
                         href={state.previewLink} 

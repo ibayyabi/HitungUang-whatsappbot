@@ -97,15 +97,15 @@ async function findRecentSimilarTransactions(userId, rawText) {
 }
 
 /**
- * Mendapatkan profil user berdasarkan nomor WhatsApp
- * @param {string} whatsappNumber 
+ * Mendapatkan profil user berdasarkan Telegram user ID.
+ * @param {string} telegramUserId
  */
-async function getUserByWhatsapp(whatsappNumber) {
+async function getUserByTelegramId(telegramUserId) {
     try {
         const { data, error } = await supabase
             .from('profiles')
             .select(PROFILE_FIELDS.join(','))
-            .eq('whatsapp_number', whatsappNumber)
+            .eq('telegram_user_id', telegramUserId)
             .single();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 is 'no rows returned'
@@ -114,14 +114,39 @@ async function getUserByWhatsapp(whatsappNumber) {
 
         return data;
     } catch (error) {
-        logger.error(`Gagal mendapatkan user by WA: ${error.message}`);
+        logger.error(`Gagal mendapatkan user by Telegram ID: ${error.message}`);
+        throw error;
+    }
+}
+
+async function findUsersByDisplayName(displayName) {
+    const normalizedDisplayName = String(displayName || '').trim();
+
+    if (!normalizedDisplayName) {
+        return [];
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select(PROFILE_FIELDS.join(','))
+            .ilike('display_name', normalizedDisplayName)
+            .limit(2);
+
+        if (error) {
+            throw error;
+        }
+
+        return data || [];
+    } catch (error) {
+        logger.error(`Gagal mendapatkan user by display name: ${error.message}`);
         throw error;
     }
 }
 
 /**
  * Mencatat transaksi baru ke database Supabase
- * @param {Object} data - Objek transaksi (item, harga, kategori, lokasi, rawText, whatsappNumber, userId)
+ * @param {Object} data - Objek transaksi (item, harga, kategori, lokasi, rawText, telegramUserId, userId)
  */
 async function appendTransaction(data) {
     const result = await appendTransactions([data]);
@@ -142,7 +167,7 @@ async function appendTransactions(transactions) {
         let userId = firstTransaction.userId;
 
         if (!userId) {
-            const user = await getUserByWhatsapp(firstTransaction.whatsappNumber);
+            const user = await getUserByTelegramId(firstTransaction.telegramUserId);
 
             if (!user) {
                 return { success: false, registered: false, insertedCount: 0 };
@@ -199,7 +224,8 @@ async function appendTransactions(transactions) {
 }
 
 module.exports = {
-    getUserByWhatsapp,
+    getUserByTelegramId,
+    findUsersByDisplayName,
     appendTransaction,
     appendTransactions,
     splitNewTransactions,

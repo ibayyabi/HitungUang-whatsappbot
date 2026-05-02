@@ -3,7 +3,7 @@ jest.mock('../services/aiParser', () => ({
 }));
 
 jest.mock('../services/dbService', () => ({
-    getUserByWhatsapp: jest.fn(),
+    getUserByTelegramId: jest.fn(),
     supabase: {}
 }));
 

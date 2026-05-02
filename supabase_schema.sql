@@ -1,9 +1,11 @@
 -- 🚀 HitungUang - Supabase Database Schema
 
--- 1. Tabel profil user yang terhubung ke nomor WhatsApp
+-- 1. Tabel profil user yang terhubung ke akun Telegram
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users PRIMARY KEY,
-  whatsapp_number TEXT UNIQUE NOT NULL, -- format: 628xxxxxxxxx
+  telegram_user_id TEXT UNIQUE NOT NULL,
+  telegram_chat_id TEXT,
+  telegram_username TEXT,
   display_name TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -24,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   harga INTEGER NOT NULL,           -- dalam Rupiah
   kategori TEXT NOT NULL DEFAULT 'lainnya',
   lokasi TEXT,
-  catatan_asli TEXT,                -- raw text dari WhatsApp
+  catatan_asli TEXT,                -- raw text dari Telegram
   tanggal TIMESTAMPTZ DEFAULT NOW(),
   tipe TEXT DEFAULT 'pengeluaran',  -- 'pengeluaran' | 'pemasukan'
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -44,7 +46,7 @@ ON public.transactions FOR ALL
 USING (auth.uid() = user_id);
 
 -- Explicit dashboard-safe write policies for anon + authenticated clients.
--- The bot may still use the service role key server-side after WhatsApp lookup.
+-- The bot may still use the service role key server-side after Telegram lookup.
 CREATE POLICY "Users can insert own transactions"
 ON public.transactions FOR INSERT
 WITH CHECK (auth.uid() = user_id);
@@ -55,4 +57,4 @@ USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
 -- 3. Functions & Triggers (Opsional: Sync profiles on auth signup)
--- User harus mendaftar via Web App agar data WA terhubung.
+-- User harus mendaftar via Web App agar data Telegram terhubung.
