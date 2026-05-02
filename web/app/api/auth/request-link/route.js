@@ -7,6 +7,7 @@ function createErrorResponse(message, status) {
 
 export async function POST(request) {
     try {
+        const whatsappModule = await import('../../../../lib/whatsapp');
         const authModule = await import('../../../../../src/services/authLinkService');
         const authLinkService = authModule.default || authModule;
         const body = await request.json();
@@ -15,10 +16,17 @@ export async function POST(request) {
             purpose: body && body.purpose,
             redirectTo: body && body.redirect_to
         });
+        const dispatch = await whatsappModule.dispatchWhatsappMessage({
+            whatsappNumber: result.whatsappNumber,
+            message: `Ini link masuk Dashboard CuanBeres Anda:\n\n${result.actionLink}\n\nLink ini bersifat pribadi. Jangan dibagikan.`
+        });
         const responsePayload = {
             success: true,
-            message: `Link masuk sudah dibuat untuk ${result.maskedWhatsappNumber}.`,
-            delivery: 'pending_whatsapp_dispatch'
+            message: dispatch.sent
+                ? `Link masuk sudah dikirim ke ${result.maskedWhatsappNumber}.`
+                : `Link masuk sudah dibuat untuk ${result.maskedWhatsappNumber}. Jika belum terkirim otomatis, ketik "dashboard" ke bot WhatsApp.`,
+            delivery: dispatch.sent ? 'sent' : 'manual_whatsapp',
+            whatsapp_url: whatsappModule.buildWhatsappChatUrl('dashboard')
         };
 
         if (process.env.NODE_ENV !== 'production') {

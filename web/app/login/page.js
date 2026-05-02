@@ -1,4 +1,5 @@
 import LoginRequestForm from './LoginRequestForm';
+import { buildWhatsappChatUrl } from '../../lib/whatsapp';
 
 export const metadata = {
     title: 'Masuk | HitungUang',
@@ -6,6 +7,8 @@ export const metadata = {
 };
 
 export default function LoginPage() {
+    const chatbotUrl = buildWhatsappChatUrl('Halo CuanBeres, saya mau daftar.');
+
     return (
         <main className="page-shell">
             <div className="bg-blobs">
@@ -25,7 +28,10 @@ export default function LoginPage() {
 
                 <div style={{ marginTop: '3rem', borderTop: '1px solid var(--border)', paddingTop: '2rem' }}>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                        Belum punya akun? <a href="https://wa.me/your-bot-number" style={{ color: 'var(--accent)', fontWeight: '700', textDecoration: 'none' }}>Daftar via WhatsApp</a>
+                        Belum punya akun?{' '}
+                        <a href={chatbotUrl || '/'} style={{ color: 'var(--accent)', fontWeight: '700', textDecoration: 'none' }}>
+                            Daftar via WhatsApp
+                        </a>
                     </p>
                 </div>
             </section>

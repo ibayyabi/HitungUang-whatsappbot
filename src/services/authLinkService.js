@@ -1,5 +1,6 @@
 const dbService = require('./dbService');
 const logger = require('../utils/logger');
+const { getWebAppUrl } = require('../utils/webAppUrl');
 const { isValidAuthPurpose } = require('../../shared/contracts');
 
 const DEFAULT_PURPOSE = 'login_web';
@@ -38,8 +39,7 @@ function buildProxyEmail(whatsappNumber) {
 }
 
 function buildVerifyRedirectUrl({ purpose, redirectTo }) {
-    const baseUrl = process.env.WEB_APP_URL || 'http://localhost:3000';
-    const target = new URL('/verify', baseUrl);
+    const target = new URL('/verify', getWebAppUrl());
 
     target.searchParams.set('purpose', purpose);
     target.searchParams.set('next', sanitizeRedirectPath(redirectTo));

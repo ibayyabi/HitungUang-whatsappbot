@@ -1,6 +1,7 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { handleMessage } = require('./handlers/messageHandler');
+const { startWhatsappDispatchServer } = require('./services/whatsappDispatchServer');
 const RateLimiter = require('./utils/rateLimiter');
 const logger = require('./utils/logger');
 const dotenv = require('dotenv');
@@ -9,7 +10,26 @@ dotenv.config();
 
 // Batasi 10 pesan per menit per user
 const limiter = new RateLimiter(10, 60000);
+let isWhatsappReady = false;
+let dispatchServer = null;
+let lastDisconnect = null;
 
+function getErrorMessage(error) {
+    if (error instanceof Error) {
+        return error.stack || error.message;
+    }
+
+    return String(error);
+}
+
+function isWhatsappNavigationAfterDisconnect(error) {
+    const message = getErrorMessage(error);
+    const disconnectedRecently = lastDisconnect && Date.now() - lastDisconnect.at < 15000;
+
+    return disconnectedRecently
+        && message.includes('Execution context was destroyed')
+        && message.includes('Client.inject');
+}
 
 const client = new Client({
     authStrategy: new LocalAuth(),
@@ -44,6 +64,8 @@ client.on('qr', (qr) => {
 });
 
 client.on('ready', () => {
+    isWhatsappReady = true;
+    lastDisconnect = null;
     console.log('\n Bot HitungUang SIAP!');
     logger.info('Bot WhatsApp Ready');
 });
@@ -60,6 +82,11 @@ client.on('auth_failure', (message) => {
 });
 
 client.on('disconnected', (reason) => {
+    isWhatsappReady = false;
+    lastDisconnect = {
+        reason,
+        at: Date.now()
+    };
     logger.warn(`WhatsApp Client disconnected: ${reason}`);
 });
 
@@ -77,6 +104,8 @@ async function processMessage(msg) {
         'Halo! 👋 Saya *HitungUang Bot*',
         '⚠️ *Nomor Anda belum terhubung*',
         'Ini link masuk Dashboard CuanBeres Anda:',
+        '↩️ Transaksi terakhir dihapus:',
+        'Belum ada transaksi yang bisa dihapus.',
         '❌ Maaf, saya gagal'
     ];
 
@@ -112,7 +141,12 @@ async function safelyProcessMessage(msg, source) {
 }
 
 process.on('unhandledRejection', (reason) => {
-    const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
+    if (isWhatsappNavigationAfterDisconnect(reason)) {
+        logger.warn(`WhatsApp Client navigation stopped after disconnect (${lastDisconnect.reason}). Ignored internal puppeteer rejection.`);
+        return;
+    }
+
+    const message = getErrorMessage(reason);
     logger.error(`Unhandled promise rejection: ${message}`);
 });
 
@@ -123,6 +157,10 @@ process.on('uncaughtException', (error) => {
 async function bootstrap() {
     try {
         console.log('Sedang memulai WhatsApp Client...');
+        dispatchServer = startWhatsappDispatchServer({
+            client,
+            isReady: () => isWhatsappReady
+        });
         await client.initialize();
     } catch (error) {
         logger.error(`Gagal initialize WhatsApp Client: ${error.stack || error.message}`);
@@ -134,6 +172,10 @@ async function bootstrap() {
 const shutdown = async () => {
     logger.info('Menghentikan bot...');
     try {
+        if (dispatchServer) {
+            await new Promise((resolve) => dispatchServer.close(resolve));
+            logger.info('WhatsApp dispatch server dihentikan.');
+        }
         await client.destroy();
         logger.info('Bot berhasil dihentikan.');
         process.exit(0);

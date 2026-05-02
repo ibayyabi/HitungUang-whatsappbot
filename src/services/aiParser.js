@@ -89,9 +89,17 @@ function normalizeParsedExpense(parsed) {
 
 class AIParser {
     constructor() {
+        this.genAI = null;
+        this.model = null;
+    }
+
+    _ensureInitialized() {
+        if (this.model) return;
+
         if (!process.env.GEMINI_API_KEY) {
-            throw new Error('GEMINI_API_KEY is not defined in .env file');
+            throw new Error('GEMINI_API_KEY is not defined in .env file. AI features are disabled.');
         }
+
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         // Menggunakan Gemini 3 Flash yang merupakan standar terbaru di 2026
         this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -102,6 +110,7 @@ class AIParser {
      */
     async parseExpense(text) {
         try {
+            this._ensureInitialized();
             const cleanText = sanitizeInput(text);
             const prompt = `${EXPENSE_PARSER_PROMPT}\n\nInput: "${cleanText}"\nOutput:`;
             const result = await this.model.generateContent(prompt);
@@ -117,6 +126,7 @@ class AIParser {
      */
     async parseImage(media) {
         try {
+            this._ensureInitialized();
             const prompt = `${EXPENSE_PARSER_PROMPT}\n\nEkstrak data transaksi dari gambar bukti pembayaran ini.`;
             const imageParts = [
                 {
@@ -140,6 +150,7 @@ class AIParser {
      */
     async parseAudio(media) {
         try {
+            this._ensureInitialized();
             const prompt = `${EXPENSE_PARSER_PROMPT}\n\nEkstrak data transaksi dari rekaman suara ini.`;
             const audioParts = [
                 {

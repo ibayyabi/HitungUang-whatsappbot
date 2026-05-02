@@ -198,10 +198,63 @@ async function appendTransactions(transactions) {
     }
 }
 
+async function deleteLatestTransaction(userId) {
+    try {
+        if (!userId) {
+            return {
+                success: false,
+                deleted: false,
+                transaction: null
+            };
+        }
+
+        const { data: latestRows, error: selectError } = await supabase
+            .from('transactions')
+            .select('id,item,harga,kategori,lokasi,catatan_asli,tipe,created_at,tanggal')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (selectError) {
+            throw selectError;
+        }
+
+        const latest = latestRows && latestRows[0];
+
+        if (!latest) {
+            return {
+                success: true,
+                deleted: false,
+                transaction: null
+            };
+        }
+
+        const { error: deleteError } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('id', latest.id)
+            .eq('user_id', userId);
+
+        if (deleteError) {
+            throw deleteError;
+        }
+
+        return {
+            success: true,
+            deleted: true,
+            transaction: latest
+        };
+    } catch (error) {
+        logger.error(`Gagal menghapus transaksi terakhir: ${error.message}`);
+        throw error;
+    }
+}
+
 module.exports = {
     getUserByWhatsapp,
     appendTransaction,
     appendTransactions,
+    deleteLatestTransaction,
     splitNewTransactions,
     createTransactionSignature,
     supabase

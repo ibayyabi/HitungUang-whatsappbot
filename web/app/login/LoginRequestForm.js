@@ -6,6 +6,7 @@ const INITIAL_STATE = {
     whatsappNumber: '',
     message: '',
     previewLink: '',
+    whatsappUrl: '',
     isError: false,
     isLoading: false
 };
@@ -20,6 +21,7 @@ export default function LoginRequestForm() {
             isLoading: true,
             message: '',
             previewLink: '',
+            whatsappUrl: '',
             isError: false
         }));
 
@@ -46,7 +48,8 @@ export default function LoginRequestForm() {
                 isLoading: false,
                 isError: false,
                 message: payload.message || 'Link berhasil dibuat. Silakan cek WhatsApp Anda.',
-                previewLink: payload.preview_link || ''
+                previewLink: payload.preview_link || '',
+                whatsappUrl: payload.whatsapp_url || ''
             }));
         } catch (error) {
             setState((current) => ({
@@ -54,7 +57,8 @@ export default function LoginRequestForm() {
                 isLoading: false,
                 isError: true,
                 message: error instanceof Error ? error.message : 'Gagal meminta link masuk.',
-                previewLink: ''
+                previewLink: '',
+                whatsappUrl: ''
             }));
         }
     }
@@ -97,6 +101,18 @@ export default function LoginRequestForm() {
                         style={{ padding: '0.5rem 1.5rem', fontSize: '0.95rem' }}
                     >
                         Buka Tautan Langsung
+                    </a>
+                </div>
+            ) : null}
+
+            {state.whatsappUrl && !state.previewLink ? (
+                <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                    <a
+                        href={state.whatsappUrl}
+                        className="route-link secondary"
+                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.95rem' }}
+                    >
+                        Chat Bot untuk Link
                     </a>
                 </div>
             ) : null}

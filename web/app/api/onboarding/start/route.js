@@ -7,10 +7,10 @@ export async function POST(request) {
 
         return Response.json(result.payload, { status: result.status });
     } catch (error) {
-        console.error('Registration Error:', error);
+        console.error('Onboarding Error:', error);
         return Response.json({
             success: false,
-            message: error instanceof Error ? error.message : 'Gagal melakukan registrasi.'
+            message: error instanceof Error ? error.message : 'Gagal memulai onboarding.'
         }, { status: 500 });
     }
 }

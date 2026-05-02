@@ -8,6 +8,16 @@
         "dev": "nodemon src/index.js",
         "test": "jest"
     },
+    "jest": {
+        "testMatch": [
+            "<rootDir>/src/__tests__/**/*.test.js"
+        ],
+        "testPathIgnorePatterns": [
+            "/node_modules/",
+            "/node_modules.bak/",
+            "/web/node_modules/"
+        ]
+    },
     "keywords": [
         "whatsapp",
         "bot",

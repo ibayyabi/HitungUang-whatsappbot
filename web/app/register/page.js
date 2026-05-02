@@ -1,13 +1,22 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
+import { MessageCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
 function RegisterContent() {
     const searchParams = useSearchParams();
     const [whatsapp, setWhatsapp] = useState('');
     const [name, setName] = useState('');
-    const [status, setStatus] = useState({ loading: false, message: '', isError: false });
+    const [status, setStatus] = useState({
+        loading: false,
+        message: '',
+        isError: false,
+        whatsappUrl: '',
+        botWhatsappNumber: '',
+        isExistingUser: false,
+        delivery: ''
+    });
 
     useEffect(() => {
         const wa = searchParams.get('whatsapp');
@@ -16,7 +25,7 @@ function RegisterContent() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setStatus({ loading: true, message: '', isError: false });
+        setStatus({ loading: true, message: '', isError: false, whatsappUrl: '', botWhatsappNumber: '', isExistingUser: false, delivery: '' });
 
         try {
             const res = await fetch('/api/auth/register', {
@@ -28,11 +37,63 @@ function RegisterContent() {
 
             if (!res.ok) throw new Error(data.message || 'Gagal registrasi');
 
-            setStatus({ loading: false, message: data.message, isError: false });
+            setStatus({
+                loading: false,
+                message: data.message,
+                isError: false,
+                whatsappUrl: data.whatsapp_url || '',
+                botWhatsappNumber: data.bot_whatsapp_number || '',
+                isExistingUser: data.existing_user,
+                delivery: data.delivery
+            });
         } catch (err) {
-            setStatus({ loading: false, message: err.message, isError: true });
+            setStatus({
+                loading: false,
+                message: err.message,
+                isError: true,
+                whatsappUrl: '',
+                botWhatsappNumber: '',
+                isExistingUser: false,
+                delivery: ''
+            });
         }
     };
+
+    if (status.message && !status.isError && (status.whatsappUrl || status.botWhatsappNumber)) {
+        return (
+            <section className="hero-card animate-in" style={{ maxWidth: '500px' }}>
+                <div className="success-icon-wrapper">
+                    <div className="success-pulse" />
+                    <MessageCircle size={48} className="success-icon" />
+                </div>
+                
+                <h1 style={{ fontSize: '2.5rem', marginTop: '1rem' }}>
+                    {status.isExistingUser ? 'Selesai! 🚀' : 'Berhasil! 🎉'}
+                </h1>
+                <p className="lead" style={{ marginBottom: '2rem' }}>
+                    {status.isExistingUser 
+                        ? `Akun ${name} sudah siap digunakan.` 
+                        : `Akun ${name} berhasil dibuat.`}
+                    {' '}
+                    {status.delivery === 'sent' 
+                        ? 'Bot kami sedang mengirimkan pesan sambutan ke nomor Anda.'
+                        : 'Silakan chat bot kami untuk memulai.'}
+                </p>
+
+                <div className="success-action-area">
+                    <a href={status.whatsappUrl} className="route-link pulse-button" style={{ width: '100%', gap: '12px', fontSize: '1.2rem' }}>
+                        <MessageCircle size={24} />
+                        Mulai Chat di WhatsApp
+                    </a>
+                    
+                    <p style={{ marginTop: '1.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                        Atau simpan nomor bot kami:<br />
+                        <strong>{status.botWhatsappNumber || 'Nomor Bot'}</strong>
+                    </p>
+                </div>
+            </section>
+        );
+    }
 
     return (
         <section className="hero-card" style={{ maxWidth: '500px' }}>
@@ -63,15 +124,9 @@ function RegisterContent() {
                 </button>
             </form>
 
-            {status.message && (
-                <div className={`status-message ${status.isError ? 'status-error' : 'status-success'}`} style={{ marginTop: '1.5rem' }}>
+            {status.isError && status.message && (
+                <div className="status-message status-error" style={{ marginTop: '1.5rem' }}>
                     {status.message}
-                </div>
-            )}
-            
-            {!status.isError && status.message && (
-                <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-                    <a href="/login" className="route-link">Ke Halaman Login →</a>
                 </div>
             )}
         </section>

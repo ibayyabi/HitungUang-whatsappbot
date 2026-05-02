@@ -4,6 +4,7 @@ const dbService = require('../services/dbService');
 const nl2sqlService = require('../services/nl2sqlService');
 const logger = require('../utils/logger');
 const { classifyMessage } = require('../utils/messageClassifier');
+const { buildWebAppUrl } = require('../utils/webAppUrl');
 
 const DASHBOARD_ACCESS_COMMANDS = new Set([
     'dashboard',
@@ -11,9 +12,19 @@ const DASHBOARD_ACCESS_COMMANDS = new Set([
     'akses dashboard',
     'buka dashboard'
 ]);
+const UNDO_LAST_TRANSACTION_COMMANDS = new Set([
+    'hapus terakhir',
+    'batalkan terakhir',
+    'undo terakhir',
+    'hapus transaksi terakhir'
+]);
 
 function isDashboardAccessCommand(text) {
     return DASHBOARD_ACCESS_COMMANDS.has(String(text || '').trim().toLowerCase());
+}
+
+function isUndoLastTransactionCommand(text) {
+    return UNDO_LAST_TRANSACTION_COMMANDS.has(String(text || '').trim().toLowerCase());
 }
 
 /**
@@ -33,9 +44,12 @@ async function handleMessage(msg) {
 
         if (!user) {
             logger.warn(`Nomor ${sender} mencoba akses tapi belum terdaftar.`);
+            const registerUrl = buildWebAppUrl(`/register?whatsapp=${encodeURIComponent(sender)}`, {
+                forUserMessage: true
+            });
             const welcomeText = `Halo! 👋 Saya *HitungUang Bot*.\n\n` +
                 `Sepertinya nomor WhatsApp Anda belum terdaftar di sistem kami. Untuk mulai menggunakan fitur catat otomatis dan dashboard AI, silakan daftar di link berikut:\n\n` +
-                `🔗 ${process.env.WEB_APP_URL || 'http://localhost:3000'}/register?whatsapp=${sender}\n\n` +
+                `🔗 ${registerUrl}\n\n` +
                 `Setelah mendaftar, Anda bisa langsung kirim catatan belanja di sini!`;
 
             return await msg.reply(welcomeText);
@@ -50,6 +64,19 @@ async function handleMessage(msg) {
 
             return await msg.reply(
                 `Ini link masuk Dashboard CuanBeres Anda:\n\n${link.actionLink}\n\nLink ini bersifat pribadi. Jangan dibagikan.`
+            );
+        }
+
+        if (isUndoLastTransactionCommand(originalText)) {
+            const result = await dbService.deleteLatestTransaction(user.id);
+
+            if (!result.deleted) {
+                return await msg.reply('Belum ada transaksi yang bisa dihapus.');
+            }
+
+            const transaction = result.transaction;
+            return await msg.reply(
+                `↩️ Transaksi terakhir dihapus:\n\n${transaction.item} - Rp ${Number(transaction.harga || 0).toLocaleString('id-ID')}`
             );
         }
 
@@ -161,4 +188,4 @@ async function handleMessage(msg) {
     }
 }
 
-module.exports = { handleMessage };
+module.exports = { handleMessage, isUndoLastTransactionCommand };

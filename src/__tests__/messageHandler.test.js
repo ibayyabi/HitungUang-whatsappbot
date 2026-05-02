@@ -8,6 +8,7 @@ jest.mock('../services/aiParser', () => ({
 jest.mock('../services/dbService', () => ({
     getUserByWhatsapp: jest.fn(),
     appendTransactions: jest.fn(),
+    deleteLatestTransaction: jest.fn(),
     supabase: {}
 }));
 
@@ -28,6 +29,7 @@ jest.mock('../utils/logger', () => ({
 const aiParser = require('../services/aiParser');
 const authLinkService = require('../services/authLinkService');
 const dbService = require('../services/dbService');
+const logger = require('../utils/logger');
 const nl2sqlService = require('../services/nl2sqlService');
 const { handleMessage } = require('../handlers/messageHandler');
 
@@ -44,8 +46,17 @@ function createMessage(body) {
 describe('handleMessage', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        process.env.WEB_APP_URL = 'https://demo-cuanberes.ngrok-free.app';
         dbService.getUserByWhatsapp.mockResolvedValue({ id: 'user-1' });
         dbService.appendTransactions.mockResolvedValue({ success: true, insertedCount: 1 });
+        dbService.deleteLatestTransaction.mockResolvedValue({
+            success: true,
+            deleted: true,
+            transaction: {
+                item: 'Bensin Mobil',
+                harga: 150000
+            }
+        });
         authLinkService.requestAuthLink.mockResolvedValue({
             actionLink: 'https://supabase.test/magic'
         });
@@ -108,6 +119,38 @@ describe('handleMessage', () => {
             redirectTo: '/dashboard'
         });
         expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('https://supabase.test/magic'));
+        expect(dbService.appendTransactions).not.toHaveBeenCalled();
+    });
+
+    test('mengirim link register berbasis WEB_APP_URL untuk user belum terdaftar', async () => {
+        const msg = createMessage('bakso 15rb');
+        dbService.getUserByWhatsapp.mockResolvedValue(null);
+
+        await handleMessage(msg);
+
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('https://demo-cuanberes.ngrok-free.app/register?whatsapp=628123'));
+        expect(msg.reply).not.toHaveBeenCalledWith(expect.stringContaining('localhost'));
+        expect(dbService.appendTransactions).not.toHaveBeenCalled();
+    });
+
+    test('memberi warning jelas saat link register fallback ke localhost', async () => {
+        const msg = createMessage('bakso 15rb');
+        delete process.env.WEB_APP_URL;
+        dbService.getUserByWhatsapp.mockResolvedValue(null);
+
+        await handleMessage(msg);
+
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('http://localhost:3000/register?whatsapp=628123'));
+        expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('WEB_APP_URL belum dikonfigurasi'));
+    });
+
+    test('menghapus transaksi terakhir ketika user meminta undo', async () => {
+        const msg = createMessage('hapus terakhir');
+
+        await handleMessage(msg);
+
+        expect(dbService.deleteLatestTransaction).toHaveBeenCalledWith('user-1');
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('Transaksi terakhir dihapus'));
         expect(dbService.appendTransactions).not.toHaveBeenCalled();
     });
 });

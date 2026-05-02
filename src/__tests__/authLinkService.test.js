@@ -125,4 +125,42 @@ describe('authLinkService', () => {
             email: 'wa-628111111111@auth.cuanberes.local'
         }));
     });
+
+    test('requestAuthLink memakai WEB_APP_URL publik untuk redirect verify', async () => {
+        process.env.WEB_APP_URL = 'https://demo-cuanberes.ngrok-free.app';
+        dbService.getUserByWhatsapp.mockResolvedValue({
+            id: 'user-3',
+            whatsapp_number: '628222222222'
+        });
+        dbService.supabase.auth.admin.getUserById.mockResolvedValue({
+            data: {
+                user: {
+                    id: 'user-3',
+                    email: 'user3@example.com',
+                    user_metadata: {}
+                }
+            },
+            error: null
+        });
+        dbService.supabase.auth.admin.generateLink.mockResolvedValue({
+            data: {
+                properties: {
+                    action_link: 'https://supabase.test/auth?token=ghi'
+                }
+            },
+            error: null
+        });
+
+        await authLinkService.requestAuthLink({
+            whatsappNumber: '628222222222',
+            purpose: 'login_web',
+            redirectTo: '/dashboard'
+        });
+
+        expect(dbService.supabase.auth.admin.generateLink).toHaveBeenCalledWith(expect.objectContaining({
+            options: {
+                redirectTo: 'https://demo-cuanberes.ngrok-free.app/verify?purpose=login_web&next=%2Fdashboard'
+            }
+        }));
+    });
 });

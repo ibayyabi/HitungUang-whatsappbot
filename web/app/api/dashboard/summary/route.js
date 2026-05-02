@@ -25,6 +25,7 @@ export async function GET() {
     const { data, error } = await supabase
         .from('transactions')
         .select(SELECT_FIELDS)
+        .eq('user_id', userData.user.id)
         .gte('tanggal', daysAgo(90))
         .order('tanggal', { ascending: false })
         .limit(250);
