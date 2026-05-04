@@ -6,7 +6,7 @@ ATURAN:
 2. Singkatan harga: "rb"/"ribu" = ×1000, "k" = ×1000, "jt"/"juta" = ×1000000. Contoh: 50rb -> 50000, 15k -> 15000, 1.2jt -> 1200000.
 3. Field yang wajib: 
    - "item" (string): nama barang/jasa/sumber pendapatan/nama tabungan.
-   - "harga" (integer): nominal jumlah uang.
+   - "harga" (number): nominal jumlah uang. WAJIB berupa angka murni tanpa titik, koma, atau satuan (misal: 2000000).
    - "tipe" (string): "pengeluaran", "pemasukan", atau "tabungan".
 4. Field opsional: 
    - "lokasi" (string|null): tempat transaksi.

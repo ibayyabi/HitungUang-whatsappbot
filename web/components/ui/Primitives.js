@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-export const botNumber = '628123456789';
+export const botNumber = '6282318552907';
 
 export function cn(...classes) {
     return classes.filter(Boolean).join(' ');

@@ -59,7 +59,9 @@ function normalizeParsedExpense(parsed) {
 
         const normalizedItem = {
             item: typeof item.item === 'string' ? item.item.trim() : '',
-            harga: Number(item.harga),
+            harga: typeof item.harga === 'string' 
+                ? Number(item.harga.replace(/[.,]/g, '')) 
+                : Number(item.harga),
             kategori: typeof item.kategori === 'string' && item.kategori.trim() ? item.kategori.trim().toLowerCase() : DEFAULT_TRANSACTION_CATEGORY,
             lokasi: typeof item.lokasi === 'string' && item.lokasi.trim() ? item.lokasi.trim() : null,
             tipe: typeof item.tipe === 'string' ? item.tipe.trim().toLowerCase() : ''
@@ -103,8 +105,8 @@ class AIParser {
             throw new Error('GEMINI_API_KEY is not defined in .env file');
         }
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        // Menggunakan Gemini 3 Flash yang merupakan standar terbaru di 2026
-        this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // Menggunakan Gemini Flash untuk kecepatan dan efisiensi
+        this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     }
 
     /**

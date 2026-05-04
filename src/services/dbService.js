@@ -5,7 +5,14 @@ const {
     DEFAULT_TRANSACTION_TYPE,
     PROFILE_FIELDS
 } = require('../../shared/contracts');
-require('dotenv').config();
+// Load dotenv only if not in Next.js environment (which loads it automatically)
+if (typeof process.env.NEXT_RUNTIME === 'undefined' && !process.env.SUPABASE_URL) {
+    try {
+        require('dotenv').config();
+    } catch (e) {
+        // Ignore
+    }
+}
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
