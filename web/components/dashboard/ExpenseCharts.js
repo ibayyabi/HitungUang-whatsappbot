@@ -1,5 +1,6 @@
 'use client';
 
+import { BarChart3 } from 'lucide-react';
 import {
     Bar,
     BarChart,
@@ -14,63 +15,90 @@ function formatCurrency(value) {
     return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 }
 
+function hasChartData(data) {
+    return data.some((item) => Number(item.pengeluaran || 0) !== 0 || Number(item.pemasukan || 0) !== 0);
+}
+
 const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-        return (
-            <div className="bg-white p-3 border border-slate-200 shadow-xl rounded-xl">
-                <p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">{label}</p>
-                {payload.map((entry, index) => (
-                    <div key={index} className="flex items-center gap-3 py-1">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.fill }} />
-                        <span className="text-sm font-semibold text-slate-700">{entry.name}:</span>
-                        <span className="text-sm font-bold text-slate-900 ml-auto">{formatCurrency(entry.value)}</span>
-                    </div>
-                ))}
-            </div>
-        );
+    if (!active || !payload || payload.length === 0) {
+        return null;
     }
-    return null;
+
+    return (
+        <div className="rounded-[18px] bg-white p-3 shadow-[var(--shadow-sm)]">
+            <p className="mb-2 text-xs font-medium text-[#636363]">{label}</p>
+            {payload.map((entry) => (
+                <div key={entry.dataKey} className="flex items-center gap-3 py-1">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.fill }} />
+                    <span className="text-sm text-[#636363]">{entry.name}</span>
+                    <span className="ml-auto text-sm font-medium text-black">{formatCurrency(entry.value)}</span>
+                </div>
+            ))}
+        </div>
+    );
 };
 
-function ChartBlock({ title, data, xKey }) {
+function EmptyChart() {
     return (
-        <div className="p-card flex flex-col">
-            <h2 className="p-card-title">{title}</h2>
-            <div className="mt-4 h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
-                        <XAxis 
-                            dataKey={xKey} 
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} 
-                            dy={10}
-                        />
-                        <YAxis 
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} 
-                            tickFormatter={(value) => `${Math.round(value / 1000)}k`} 
-                        />
-                        <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
-                        <Bar 
-                            name="Pengeluaran"
-                            dataKey="pengeluaran" 
-                            fill="#ef4444" 
-                            radius={[6, 6, 0, 0]} 
-                            barSize={32}
-                        />
-                        <Bar 
-                            name="Pemasukan"
-                            dataKey="pemasukan" 
-                            fill="#10b981" 
-                            radius={[6, 6, 0, 0]} 
-                            barSize={32}
-                        />
-                    </BarChart>
-                </ResponsiveContainer>
+        <div className="flex h-64 flex-col items-center justify-center rounded-[24px] bg-[#f8f8f8] p-6 text-center">
+            <BarChart3 className="mb-4 h-6 w-6 text-black" />
+            <p className="text-sm font-medium text-black">Belum ada data grafik.</p>
+            <p className="hu-body mt-2 text-sm">Kirim transaksi dari WhatsApp untuk melihat tren.</p>
+        </div>
+    );
+}
+
+function ChartBlock({ title, data, xKey }) {
+    const empty = !hasChartData(data);
+
+    return (
+        <div className="p-card flex min-h-[340px] flex-col">
+            <div className="mb-5 flex items-center justify-between gap-3">
+                <div>
+                    <h2 className="p-card-title mb-0">{title}</h2>
+                    <p className="hu-meta">Pemasukan dan pengeluaran</p>
+                </div>
             </div>
+
+            {empty ? (
+                <EmptyChart />
+            ) : (
+                <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="4 4" stroke="#efefef" vertical={false} />
+                            <XAxis
+                                dataKey={xKey}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 11, fontWeight: 400, fill: '#636363' }}
+                                dy={10}
+                            />
+                            <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 11, fontWeight: 400, fill: '#636363' }}
+                                tickFormatter={(value) => `${Math.round(value / 1000)}k`}
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8f8f8' }} />
+                            <Bar
+                                name="Pengeluaran"
+                                dataKey="pengeluaran"
+                                fill="#edb09c"
+                                radius={[10, 10, 0, 0]}
+                                barSize={28}
+                            />
+                            <Bar
+                                name="Pemasukan"
+                                dataKey="pemasukan"
+                                fill="#75ddd1"
+                                radius={[10, 10, 0, 0]}
+                                barSize={28}
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
         </div>
     );
 }
@@ -79,16 +107,16 @@ export function ExpenseCharts({ dailySeries, weeklySeries, loading }) {
     if (loading) {
         return (
             <div className="chart-grid">
-                <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
-                <div className="h-80 animate-pulse rounded-2xl bg-slate-100" />
+                <div className="h-[340px] animate-pulse rounded-[30px] bg-[#efefef]" />
+                <div className="h-[340px] animate-pulse rounded-[30px] bg-[#efefef]" />
             </div>
         );
     }
 
     return (
         <section className="chart-grid">
-            <ChartBlock title="Aliran Kas Harian" data={dailySeries} xKey="date" />
-            <ChartBlock title="Aliran Kas Mingguan" data={weeklySeries} xKey="week" />
+            <ChartBlock title="Tren harian" data={dailySeries} xKey="date" />
+            <ChartBlock title="Tren mingguan" data={weeklySeries} xKey="week" />
         </section>
     );
 }

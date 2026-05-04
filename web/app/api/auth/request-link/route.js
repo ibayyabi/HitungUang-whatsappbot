@@ -5,6 +5,13 @@ function createErrorResponse(message, status) {
     }, { status });
 }
 
+function toPublicMessage(message) {
+    return String(message || '')
+        .replace(/Telegram User ID/g, 'nomor WhatsApp')
+        .replace(/Telegram/g, 'WhatsApp')
+        .replace(/magic link/gi, 'link masuk aman');
+}
+
 export async function POST(request) {
     try {
         const authModule = await import('../../../../../src/services/authLinkService');
@@ -18,7 +25,7 @@ export async function POST(request) {
         });
         const responsePayload = {
             success: true,
-            message: `Link masuk sudah dibuat untuk akun ${result.maskedTelegramId}. Jika meminta dari halaman web, gunakan tombol tautan langsung yang muncul di bawah. Untuk dikirim ke chat Telegram, ketik "dashboard" di bot.`,
+            message: `Link masuk sudah dibuat untuk akun ${result.maskedTelegramId}. Jika meminta dari halaman web, gunakan tombol tautan langsung yang muncul di bawah. Untuk dikirim ke chat WhatsApp, ketik "dashboard" di bot.`,
             delivery: 'web_preview'
         };
 
@@ -29,7 +36,7 @@ export async function POST(request) {
         return Response.json(responsePayload, { status: 200 });
     } catch (error) {
         console.error('Error request-link:', error);
-        const message = error instanceof Error ? error.message : 'Gagal membuat magic link.';
+        const message = error instanceof Error ? error.message : 'Gagal membuat link masuk.';
 
         if (
             message === 'Akun belum terdaftar.' ||
@@ -37,9 +44,9 @@ export async function POST(request) {
             message === 'Nama terdaftar dipakai lebih dari satu akun. Gunakan Telegram User ID.' ||
             message === 'Purpose auth tidak valid.'
         ) {
-            return createErrorResponse(message, 400);
+            return createErrorResponse(toPublicMessage(message), 400);
         }
 
-        return createErrorResponse('Gagal membuat magic link.', 500);
+        return createErrorResponse('Gagal membuat link masuk.', 500);
     }
 }

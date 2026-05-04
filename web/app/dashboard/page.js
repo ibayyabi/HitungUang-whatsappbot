@@ -4,7 +4,7 @@ import DashboardClient from './DashboardClient';
 
 export const metadata = {
     title: 'Dashboard | CuanBeres',
-    description: 'Ringkasan transaksi CuanBeres dari Telegram.'
+    description: 'Ringkasan transaksi CuanBeres dari WhatsApp.'
 };
 
 export const dynamic = 'force-dynamic';

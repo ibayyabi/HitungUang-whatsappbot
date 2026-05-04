@@ -1,11 +1,16 @@
-import { History, Calendar, Tag, MapPin, ReceiptText } from 'lucide-react';
+import { Calendar, History, MapPin, MessageCircle, ReceiptText, Tag } from 'lucide-react';
+import { ButtonLink } from '../ui/Primitives';
 
 function formatCurrency(value) {
     return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 }
 
 function formatDate(dateStr) {
+    if (!dateStr) return '-';
+
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return '-';
+
     return date.toLocaleDateString('id-ID', {
         day: '2-digit',
         month: 'short',
@@ -14,75 +19,139 @@ function formatDate(dateStr) {
     });
 }
 
+function TransactionAmount({ transaction }) {
+    const isIncome = transaction.tipe === 'pemasukan';
+
+    return (
+        <span className={`font-medium ${isIncome ? 'text-[#176d64]' : 'text-black'}`}>
+            {isIncome ? '+' : ''}
+            {formatCurrency(transaction.harga)}
+        </span>
+    );
+}
+
+function EmptyState() {
+    return (
+        <div className="rounded-[24px] bg-[#f8f8f8] p-6 text-center">
+            <MessageCircle className="mx-auto mb-4 h-6 w-6 text-black" />
+            <p className="text-sm font-medium text-black">Belum ada transaksi.</p>
+            <p className="hu-body mx-auto mt-2 max-w-sm text-sm">Catat transaksi pertama lewat WhatsApp, lalu perbarui dashboard.</p>
+            <ButtonLink href="https://wa.me/628123456789" variant="secondary" className="mt-4" external>
+                Buka WhatsApp
+            </ButtonLink>
+        </div>
+    );
+}
+
+function TransactionMobileList({ transactions }) {
+    return (
+        <div className="grid gap-3 md:hidden">
+            {transactions.map((transaction) => (
+                <article key={transaction.id} className="rounded-[22px] bg-[#f8f8f8] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 className="text-base font-medium text-black">{transaction.item}</h3>
+                            <p className="hu-meta mt-1">{formatDate(transaction.tanggal || transaction.created_at)}</p>
+                        </div>
+                        <TransactionAmount transaction={transaction} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-[#636363]">
+                        <span className="rounded-full bg-white px-3 py-1 capitalize shadow-[var(--shadow-sm)]">{transaction.kategori}</span>
+                        {transaction.lokasi ? (
+                            <span className="rounded-full bg-white px-3 py-1 shadow-[var(--shadow-sm)]">{transaction.lokasi}</span>
+                        ) : null}
+                    </div>
+                    <p className="mt-3 text-sm text-[#636363]">{transaction.catatan_asli || '-'}</p>
+                </article>
+            ))}
+        </div>
+    );
+}
+
 export function TransactionTable({ transactions, loading }) {
     return (
         <section className="p-card overflow-hidden">
-            <header className="flex items-center justify-between mb-6 px-1">
+            <header className="mb-6 flex items-center justify-between gap-3 px-1">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-100">
-                        <History size={18} />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#efefef] text-black">
+                        <History className="h-5 w-5" />
                     </div>
                     <div>
-                        <h2 className="p-card-title mb-0">Riwayat Transaksi</h2>
-                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Hasil strukturisasi AI</p>
+                        <h2 className="p-card-title mb-0">Transaksi terbaru</h2>
+                        <p className="hu-meta">Hasil catatan dari WhatsApp</p>
                     </div>
                 </div>
             </header>
 
-            <div className="p-table-container">
-                <table className="p-table">
-                    <thead>
-                        <tr>
-                            <th><div className="flex items-center gap-2"><Calendar size={12} /> Waktu</div></th>
-                            <th><div className="flex items-center gap-2"><ReceiptText size={12} /> Item & Chat Asli</div></th>
-                            <th><div className="flex items-center gap-2"><Tag size={12} /> Kategori</div></th>
-                            <th className="text-right">Nominal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            [1, 2, 3, 4, 5].map((i) => (
-                                <tr key={i}>
-                                    <td colSpan={4} className="py-4"><div className="h-4 w-full animate-pulse bg-slate-50 rounded" /></td>
-                                </tr>
-                            ))
-                        ) : transactions.length === 0 ? (
-                            <tr>
-                                <td colSpan={4} className="py-12 text-center text-sm text-slate-400 font-medium italic">Belum ada transaksi tercatat.</td>
-                            </tr>
-                        ) : (
-                            transactions.map((tx) => (
-                                <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
-                                    <td className="whitespace-nowrap font-medium text-slate-500 text-xs">
-                                        {formatDate(tx.tanggal || tx.created_at)}
-                                    </td>
-                                    <td>
-                                        <div className="flex flex-col gap-1">
-                                            <span className="font-bold text-slate-900">{tx.item}</span>
-                                            <span className="text-[11px] text-slate-400 italic line-clamp-1">{tx.catatan_asli || '-'}</span>
-                                            {tx.lokasi && (
-                                                <div className="flex items-center gap-1 text-[10px] text-slate-400 font-bold">
-                                                    <MapPin size={10} /> {tx.lokasi}
-                                                </div>
-                                            )}
+            {loading ? (
+                <div className="grid gap-3">
+                    {[1, 2, 3, 4].map((item) => (
+                        <div key={item} className="h-16 w-full animate-pulse rounded-[22px] bg-[#efefef]" />
+                    ))}
+                </div>
+            ) : transactions.length === 0 ? (
+                <EmptyState />
+            ) : (
+                <>
+                    <TransactionMobileList transactions={transactions} />
+                    <div className="p-table-container hidden md:block">
+                        <table className="p-table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        <div className="flex items-center gap-2">
+                                            <Calendar className="h-3 w-3" />
+                                            Waktu
                                         </div>
-                                    </td>
-                                    <td>
-                                        <span className={`p-badge ${tx.tipe === 'pemasukan' ? 'p-badge-success' : 'p-badge-warning'} capitalize`}>
-                                            {tx.kategori}
-                                        </span>
-                                    </td>
-                                    <td className="text-right">
-                                        <span className={`font-extrabold ${tx.tipe === 'pemasukan' ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                            {tx.tipe === 'pemasukan' ? '+' : ''}{formatCurrency(tx.harga)}
-                                        </span>
-                                    </td>
+                                    </th>
+                                    <th>
+                                        <div className="flex items-center gap-2">
+                                            <ReceiptText className="h-3 w-3" />
+                                            Item dan chat
+                                        </div>
+                                    </th>
+                                    <th>
+                                        <div className="flex items-center gap-2">
+                                            <Tag className="h-3 w-3" />
+                                            Kategori
+                                        </div>
+                                    </th>
+                                    <th className="text-right">Nominal</th>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                            </thead>
+                            <tbody>
+                                {transactions.map((transaction) => (
+                                    <tr key={transaction.id}>
+                                        <td className="whitespace-nowrap text-xs text-[#636363]">
+                                            {formatDate(transaction.tanggal || transaction.created_at)}
+                                        </td>
+                                        <td>
+                                            <div>
+                                                <span className="font-medium text-black">{transaction.item}</span>
+                                                <p className="mt-1 max-w-md truncate text-xs text-[#959595]">{transaction.catatan_asli || '-'}</p>
+                                                {transaction.lokasi ? (
+                                                    <div className="mt-1 flex items-center gap-1 text-xs text-[#959595]">
+                                                        <MapPin className="h-3 w-3" />
+                                                        {transaction.lokasi}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className={`p-badge ${transaction.tipe === 'pemasukan' ? 'p-badge-success' : 'p-badge-warning'} capitalize`}>
+                                                {transaction.kategori}
+                                            </span>
+                                        </td>
+                                        <td className="text-right">
+                                            <TransactionAmount transaction={transaction} />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
         </section>
     );
 }

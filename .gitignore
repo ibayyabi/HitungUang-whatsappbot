@@ -15,10 +15,6 @@ dist/
 credentials.json
 *.pem
 
-# WhatsApp Session & Cache
-.wwebjs_auth/
-.wwebjs_cache/
-
 # Logs
 logs/
 *.log
@@ -33,3 +29,7 @@ Thumbs.db
 # Other
 .vercel
 .turbo
+
+# WhatsApp Session & Cache
+.wwebjs_auth/
+.wwebjs_cache/

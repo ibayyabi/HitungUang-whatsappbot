@@ -29,7 +29,7 @@ export async function POST(request) {
         const normalizedTelegramUserId = String(telegram_user_id).replace(/\D/g, '');
 
         if (!normalizedTelegramUserId) {
-            return Response.json({ success: false, message: 'Telegram User ID tidak valid.' }, { status: 400 });
+            return Response.json({ success: false, message: 'Nomor WhatsApp tidak valid.' }, { status: 400 });
         }
 
         const proxyEmail = `tg-${normalizedTelegramUserId}@${process.env.AUTH_PROXY_EMAIL_DOMAIN || 'auth.cuanberes.local'}`;

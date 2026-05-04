@@ -1,105 +1,280 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import {
+    ArrowLeft,
+    ArrowRight,
+    CheckCircle2,
+    Loader2,
+    LockKeyhole,
+    MessageCircle,
+    Phone,
+    UserRound
+} from 'lucide-react';
+import {
+    AppHeader,
+    botNumber,
+    Button,
+    ButtonLink,
+    Field,
+    PageShell,
+    Surface
+} from '../../components/ui/Primitives';
+
+function normalizePhone(value) {
+    return String(value || '').replace(/\D/g, '');
+}
 
 function RegisterContent() {
     const searchParams = useSearchParams();
-    const [telegramUserId, setTelegramUserId] = useState('');
+    const [whatsappNumber, setWhatsappNumber] = useState('');
     const [telegramChatId, setTelegramChatId] = useState('');
     const [telegramUsername, setTelegramUsername] = useState('');
     const [name, setName] = useState('');
-    const [status, setStatus] = useState({ loading: false, message: '', isError: false });
+    const [status, setStatus] = useState({
+        loading: false,
+        message: '',
+        isError: false,
+        success: false
+    });
 
     useEffect(() => {
         const userId = searchParams.get('whatsapp') || searchParams.get('telegram_user_id');
         const chatId = searchParams.get('chat_id');
         const username = searchParams.get('username');
 
-        if (userId) setTelegramUserId(userId);
+        if (userId) setWhatsappNumber(normalizePhone(userId));
         if (chatId) setTelegramChatId(chatId);
         if (username) setTelegramUsername(username);
     }, [searchParams]);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setStatus({ loading: true, message: '', isError: false });
+    const lockedWhatsappNumber = !!searchParams.get('whatsapp') || !!searchParams.get('telegram_user_id');
+    const registeredError = useMemo(
+        () => status.isError && status.message.toLowerCase().includes('terdaftar'),
+        [status.isError, status.message]
+    );
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        const normalizedWhatsapp = normalizePhone(whatsappNumber);
+
+        if (!normalizedWhatsapp.startsWith('62') || normalizedWhatsapp.length < 10) {
+            setStatus({
+                loading: false,
+                message: 'Gunakan format nomor WhatsApp 628...',
+                isError: true,
+                success: false
+            });
+            return;
+        }
+
+        setStatus({ loading: true, message: '', isError: false, success: false });
+        setWhatsappNumber(normalizedWhatsapp);
 
         try {
-            const res = await fetch('/api/auth/register', {
+            const response = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    telegram_user_id: telegramUserId,
+                    telegram_user_id: normalizedWhatsapp,
                     telegram_chat_id: telegramChatId,
                     telegram_username: telegramUsername,
-                    display_name: name
+                    display_name: name.trim()
                 })
             });
-            const data = await res.json();
+            const data = await response.json();
 
-            if (!res.ok) throw new Error(data.message || 'Gagal registrasi');
+            if (!response.ok) {
+                throw new Error(data.message || 'Gagal registrasi.');
+            }
 
-            setStatus({ loading: false, message: data.message, isError: false });
-        } catch (err) {
-            setStatus({ loading: false, message: err.message, isError: true });
+            setStatus({
+                loading: false,
+                message: data.message || 'Registrasi berhasil.',
+                isError: false,
+                success: true
+            });
+        } catch (error) {
+            setStatus({
+                loading: false,
+                message: error instanceof Error ? error.message : 'Gagal registrasi.',
+                isError: true,
+                success: false
+            });
         }
     };
 
+    if (status.success) {
+        return (
+            <section className="hu-shell grid min-h-[calc(100vh-92px)] items-center gap-10 py-14 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="min-w-0">
+                    <ButtonLink href="/" variant="ghost" className="mb-8 px-0">
+                        <ArrowLeft className="h-4 w-4" />
+                        Beranda
+                    </ButtonLink>
+                    <div className="mb-7 flex items-center gap-3">
+                        <Image src="/logo.png" alt="CuanBeres" width={54} height={47} className="h-12 w-auto" priority />
+                        <span className="text-2xl font-medium text-black">CuanBeres</span>
+                    </div>
+                    <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-sm text-[#176d64] shadow-[var(--shadow-sm)]">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Pendaftaran berhasil
+                    </div>
+                    <h1 className="hu-heading max-w-xl">Akun siap dipakai.</h1>
+                    <p className="hu-body mt-5 max-w-lg">
+                        Halo {name.trim()}, nomor WhatsApp sudah terhubung. Buka chat bot, kirim transaksi pertama, lalu minta link masuk dashboard saat perlu.
+                    </p>
+                    <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                        <ButtonLink href={`https://wa.me/${botNumber}`} external>
+                            <MessageCircle className="h-4 w-4" />
+                            Buka chat bot
+                        </ButtonLink>
+                        <ButtonLink href="/login" variant="secondary">
+                            Masuk dashboard
+                        </ButtonLink>
+                    </div>
+                </div>
+
+                <Surface className="overflow-hidden">
+                    <div className="grid gap-6 p-5 md:grid-cols-[1fr_220px] md:items-center md:p-6">
+                        <div>
+                            <p className="hu-kicker">Langkah berikutnya</p>
+                            <h2 className="hu-subheading mt-3">Kirim contoh transaksi dari WhatsApp.</h2>
+                            <div className="mt-5 rounded-[24px] bg-[#f8f8f8] p-4">
+                                <p className="text-sm text-[#636363]">Contoh pesan</p>
+                                <p className="mt-2 text-2xl font-light text-black">makan siang 25rb</p>
+                            </div>
+                            <p className="hu-body mt-4 text-sm">
+                                CuanBeres akan mengubah pesan menjadi transaksi terstruktur di dashboard.
+                            </p>
+                        </div>
+                        <div className="relative mx-auto aspect-[9/16] w-full max-w-[180px] overflow-hidden rounded-[24px] bg-[#efefef] shadow-[var(--shadow-sm)]">
+                            <Image src="/link.png" alt="QR kontak WhatsApp CuanBeres" fill className="object-cover" priority />
+                        </div>
+                    </div>
+                </Surface>
+            </section>
+        );
+    }
+
     return (
-        <section className="hero-card" style={{ maxWidth: '500px' }}>
-            <span className="eyebrow">Pendaftaran User</span>
-            <h1>Halo User Baru!</h1>
-            <p className="lead" style={{ marginBottom: '2rem' }}>
-                Lengkapi nama Anda untuk mulai menggunakan HitungUang Bot.
-            </p>
+        <section className="hu-shell grid min-h-[calc(100vh-92px)] items-center gap-12 py-14 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="min-w-0">
+                <ButtonLink href="/onboarding" variant="ghost" className="mb-8 px-0">
+                    <ArrowLeft className="h-4 w-4" />
+                    Onboarding
+                </ButtonLink>
+                <div className="mb-7 flex items-center gap-3">
+                    <Image src="/logo.png" alt="CuanBeres" width={54} height={47} className="h-12 w-auto" priority />
+                    <span className="text-2xl font-medium text-black">CuanBeres</span>
+                </div>
+                <p className="hu-kicker">Registrasi</p>
+                <h1 className="hu-heading mt-4 max-w-xl">Hubungkan nomor WhatsApp.</h1>
+                <p className="hu-body mt-5 max-w-lg">
+                    Isi nomor dengan format 628... dan nama tampilan. Nomor dari link bot akan terkunci agar akun tetap sesuai chat WhatsApp.
+                </p>
+            </div>
 
-            <form className="stack-form" onSubmit={handleSubmit}>
-                <div className="field">
-                    <span>Nomor WhatsApp</span>
-                    <input type="text" value={telegramUserId} readOnly style={{ backgroundColor: 'var(--bg-secondary)', opacity: 0.7 }} />
-                </div>
-                <div className="field">
-                    <span>Nama Tampilan</span>
-                    <input 
-                        type="text" 
-                        placeholder="Masukkan nama Anda..." 
-                        value={name} 
-                        onChange={(e) => setName(e.target.value)} 
-                        required 
-                        autoFocus
-                    />
-                </div>
-                <button type="submit" disabled={status.loading || !name || !telegramUserId}>
-                    {status.loading ? 'Mendaftarkan...' : 'Selesaikan Pendaftaran'}
-                </button>
-            </form>
+            <Surface className="p-6 md:p-8">
+                <form className="space-y-5" onSubmit={handleSubmit}>
+                    <Field
+                        id="whatsapp-number"
+                        label="Nomor WhatsApp"
+                        icon={<Phone className="h-4 w-4 text-black" />}
+                        helper={lockedWhatsappNumber ? 'Nomor berasal dari link WhatsApp bot.' : 'Gunakan kode negara Indonesia, contoh 628...'}
+                    >
+                        <input
+                            id="whatsapp-number"
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="tel"
+                            placeholder="628123456789"
+                            value={whatsappNumber}
+                            onChange={(event) => setWhatsappNumber(normalizePhone(event.target.value))}
+                            readOnly={lockedWhatsappNumber}
+                            className="hu-input"
+                            aria-invalid={status.isError}
+                        />
+                    </Field>
 
-            {status.message && (
-                <div className={`status-message ${status.isError ? 'status-error' : 'status-success'}`} style={{ marginTop: '1.5rem' }}>
-                    {status.message}
-                </div>
-            )}
-            
-            {!status.isError && status.message && (
-                <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-                    <a href="/login" className="route-link">Ke Halaman Login →</a>
-                </div>
-            )}
+                    <Field
+                        id="display-name"
+                        label="Nama tampilan"
+                        icon={<UserRound className="h-4 w-4 text-black" />}
+                    >
+                        <input
+                            id="display-name"
+                            type="text"
+                            placeholder="Nama panggilan"
+                            value={name}
+                            onChange={(event) => setName(event.target.value)}
+                            required
+                            autoFocus
+                            className="hu-input"
+                        />
+                    </Field>
+
+                    <Button
+                        type="submit"
+                        disabled={status.loading || !name.trim() || !whatsappNumber.trim()}
+                        className="w-full"
+                    >
+                        {status.loading ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Memproses
+                            </>
+                        ) : (
+                            <>
+                                Selesaikan daftar
+                                <ArrowRight className="h-4 w-4" />
+                            </>
+                        )}
+                    </Button>
+                </form>
+
+                {status.message && (
+                    <div className={`mt-5 rounded-[20px] p-4 text-sm ${status.isError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                        <div className="flex items-start gap-3">
+                            <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
+                            <div>
+                                <p>{status.message}</p>
+                                {registeredError ? (
+                                    <Link href={`/login?whatsapp=${encodeURIComponent(normalizePhone(whatsappNumber))}`} className="mt-3 inline-flex font-medium underline decoration-black/40 underline-offset-4">
+                                        Minta link masuk
+                                    </Link>
+                                ) : null}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </Surface>
         </section>
     );
 }
 
 export default function RegisterPage() {
+    useEffect(() => {
+        document.documentElement.classList.add('landing-page');
+        return () => document.documentElement.classList.remove('landing-page');
+    }, []);
+
     return (
-        <main className="page-shell">
-            <div className="bg-blobs">
-                <div className="blob blob-1" />
-                <div className="blob blob-2" />
-            </div>
-            <Suspense fallback={<p>Memuat...</p>}>
+        <PageShell>
+            <AppHeader actionHref="/register" actionLabel="Daftar" secondaryHref="/login" secondaryLabel="Masuk" />
+            <Suspense
+                fallback={
+                    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+                        <Loader2 className="h-8 w-8 animate-spin text-black" />
+                        <p className="hu-meta">Memuat form registrasi...</p>
+                    </div>
+                }
+            >
                 <RegisterContent />
             </Suspense>
-        </main>
+        </PageShell>
     );
 }
