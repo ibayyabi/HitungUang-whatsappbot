@@ -20,6 +20,8 @@
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "recharts": "^3.8.1",
-        "tailwindcss": "^4.2.4"
+        "tailwindcss": "^4.2.4",
+        "dotenv": "^16.4.7",
+        "winston": "^3.17.0"
     }
 }

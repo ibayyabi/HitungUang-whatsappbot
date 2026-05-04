@@ -34,8 +34,8 @@ function hasTransactionAmount(text) {
         return false;
     }
 
-    const currencyPattern = /\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta|rupiah)?\b/i;
-    const matches = normalized.match(/\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta|rupiah)?\b/gi) || [];
+    const currencyPattern = /\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta|milyar|miliar|rupiah)?\b/i;
+    const matches = normalized.match(/\b(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|k|jt|juta|milyar|miliar|rupiah)?\b/gi) || [];
 
     if (!currencyPattern.test(normalized)) {
         return false;
@@ -44,7 +44,7 @@ function hasTransactionAmount(text) {
     return matches.some((rawToken) => {
         const token = rawToken.toLowerCase().replace(/rp\.?\s*/g, '').trim();
         const numericValue = parseFloat(token.replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.'));
-        const hasCurrencySuffix = /(rb|ribu|k|jt|juta|rupiah)/.test(token) || /^rp/.test(rawToken.toLowerCase());
+        const hasCurrencySuffix = /(rb|ribu|k|jt|juta|milyar|miliar|rupiah)/.test(token) || /^rp/.test(rawToken.toLowerCase());
 
         if (hasCurrencySuffix) {
             return true;

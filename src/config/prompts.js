@@ -3,7 +3,7 @@ module.exports = {
 
 ATURAN:
 1. Output HANYA JSON murni, tanpa markdown (\`\`\`), tanpa penjelasan.
-2. Singkatan harga: "rb"/"ribu" = ×1000, "k" = ×1000, "jt"/"juta" = ×1000000. Contoh: 50rb -> 50000, 15k -> 15000, 1.2jt -> 1200000.
+2. Singkatan harga: "rb"/"ribu" = ×1000, "k" = ×1000, "jt"/"juta" = ×1000000, "milyar"/"miliar"/"m" = ×1000000000. Contoh: 50rb -> 50000, 1.2jt -> 1200000, 2milyar -> 2000000000.
 3. Field yang wajib: 
    - "item" (string): nama barang/jasa/sumber pendapatan/nama tabungan.
    - "harga" (number): nominal jumlah uang. WAJIB berupa angka murni tanpa titik, koma, atau satuan (misal: 2000000).
