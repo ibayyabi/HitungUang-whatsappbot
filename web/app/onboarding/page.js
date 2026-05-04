@@ -145,7 +145,7 @@ export default function OnboardingPage() {
                                 </div>
                             </div>
                             <div className="relative mx-auto aspect-[9/16] w-full max-w-[180px] overflow-hidden rounded-[24px] bg-[#efefef] shadow-[var(--shadow-sm)]">
-                                <Image src="/link.png" alt="QR kontak WhatsApp CuanBeres" fill className="object-cover" />
+                                <Image src="/link.jpg" alt="QR kontak WhatsApp CuanBeres" fill className="object-cover" />
                             </div>
                         </div>
                     </Surface>

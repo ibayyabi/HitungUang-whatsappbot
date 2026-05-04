@@ -37,7 +37,10 @@ export async function POST(request) {
 
         const proxyEmail = `tg-${normalizedTelegramUserId}@${process.env.AUTH_PROXY_EMAIL_DOMAIN || 'auth.cuanberes.local'}`;
         
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        let authData = null;
+        let authError = null;
+
+        const { data: createdData, error: createError } = await supabase.auth.admin.createUser({
             email: proxyEmail,
             email_confirm: true,
             user_metadata: {
@@ -51,12 +54,21 @@ export async function POST(request) {
             }
         });
 
-        if (authError) {
-            if (authError.message.includes('already registered')) {
-                return Response.json({ success: false, message: 'Nomor WhatsApp sudah terdaftar. Silakan login.' }, { status: 400 });
+        authData = createdData;
+        authError = createError;
+
+        if (authError && (authError.code === 'email_exists' || authError.message?.includes('already registered'))) {
+            const { data: usersData, error: listError } = await supabase.auth.admin.listUsers();
+            if (!listError) {
+                const existingUser = usersData.users.find(u => u.email === proxyEmail);
+                if (existingUser) {
+                    authData = { user: existingUser };
+                    authError = null;
+                }
             }
-            throw authError;
         }
+
+        if (authError) throw authError;
 
         const userId = authData.user.id;
 
@@ -75,9 +87,24 @@ export async function POST(request) {
 
         if (profileError) throw profileError;
 
+        // Kirim pesan onboarding via WhatsApp (Fonnte)
+        try {
+            const fonnteModule = await import('../../../../../src/services/fonnteService');
+            const fonnteService = fonnteModule.default || fonnteModule;
+            
+            const onboardingMessage = `Halo ${display_name || 'Kak'}! Selamat bergabung di HitungUang 🚀.\n\nSekarang kamu bisa langsung mencatat transaksi lewat sini. Cukup ketik saja seperti biasa, contoh:\n- *makan siang 25rb*\n- *pemasukan gaji 5jt*\n\nKetik *'dashboard'* kapan saja untuk mendapatkan link masuk ke halaman web. Selamat mengelola keuangan! 💰`;
+            
+            await fonnteService.sendMessage({
+                target: normalizedTelegramUserId,
+                message: onboardingMessage
+            });
+        } catch (msgError) {
+            console.error('Gagal mengirim pesan onboarding:', msgError.message);
+        }
+
         return Response.json({ 
             success: true, 
-            message: 'Registrasi berhasil! Silakan kembali ke WhatsApp untuk mulai mencatat, atau login ke Dashboard.' 
+            message: 'Registrasi berhasil! Pesan sambutan telah dikirim ke WhatsApp Anda.' 
         });
 
     } catch (error) {

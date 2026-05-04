@@ -11,10 +11,14 @@ const logger = winston.createLogger({
     ),
     transports: [
         new winston.transports.Console(),
-        new winston.transports.File({
-            filename: path.join(process.cwd(), 'logs', 'app.log')
-        })
     ],
 });
+
+// Add file transport only if not in production/Vercel
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    logger.add(new winston.transports.File({
+        filename: path.join(process.cwd(), 'logs', 'app.log')
+    }));
+}
 
 module.exports = logger;

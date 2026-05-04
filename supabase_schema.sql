@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   telegram_username TEXT,
   display_name TEXT,
   status_pekerjaan TEXT,
-  target_pengeluaran_bulanan INTEGER,
-  target_pemasukan_bulanan INTEGER,
+  target_pengeluaran_bulanan BIGINT,
+  target_pemasukan_bulanan BIGINT,
   last_alert_month TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS public.wallets (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   nama_dompet TEXT NOT NULL,
-  target_nominal INTEGER NOT NULL DEFAULT 0,
-  terkumpul INTEGER NOT NULL DEFAULT 0,
+  target_nominal BIGINT NOT NULL DEFAULT 0,
+  terkumpul BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   item TEXT NOT NULL,
-  harga INTEGER NOT NULL,           -- dalam Rupiah
+  harga BIGINT NOT NULL,           -- dalam Rupiah (mendukung nominal besar)
   kategori TEXT NOT NULL DEFAULT 'lainnya',
   lokasi TEXT,
   catatan_asli TEXT,                -- raw text dari Telegram
