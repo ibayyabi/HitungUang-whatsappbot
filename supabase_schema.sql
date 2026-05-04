@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   telegram_chat_id TEXT,
   telegram_username TEXT,
   display_name TEXT,
+  status_pekerjaan TEXT,
+  target_pengeluaran_bulanan INTEGER,
+  target_pemasukan_bulanan INTEGER,
+  last_alert_month TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -18,7 +22,24 @@ CREATE POLICY "Users can view own profile"
 ON public.profiles FOR SELECT 
 USING (auth.uid() = id);
 
--- 2. Tabel transaksi utama
+-- 2. Tabel wallets (Dompet Tabungan)
+CREATE TABLE IF NOT EXISTS public.wallets (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  nama_dompet TEXT NOT NULL,
+  target_nominal INTEGER NOT NULL DEFAULT 0,
+  terkumpul INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS on wallets
+ALTER TABLE public.wallets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own wallets" 
+ON public.wallets FOR ALL 
+USING (auth.uid() = user_id);
+
+-- 3. Tabel transaksi utama
 CREATE TABLE IF NOT EXISTS public.transactions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -28,7 +49,8 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   lokasi TEXT,
   catatan_asli TEXT,                -- raw text dari Telegram
   tanggal TIMESTAMPTZ DEFAULT NOW(),
-  tipe TEXT DEFAULT 'pengeluaran',  -- 'pengeluaran' | 'pemasukan'
+  tipe TEXT DEFAULT 'pengeluaran',  -- 'pengeluaran' | 'pemasukan' | 'tabungan'
+  wallet_id UUID REFERENCES public.wallets(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -56,5 +78,5 @@ ON public.transactions FOR UPDATE
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
--- 3. Functions & Triggers (Opsional: Sync profiles on auth signup)
+-- 4. Functions & Triggers (Opsional: Sync profiles on auth signup)
 -- User harus mendaftar via Web App agar data Telegram terhubung.

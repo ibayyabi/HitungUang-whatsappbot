@@ -197,12 +197,31 @@ async function handleMessage(input) {
             let confirmationText = '✅ *Berhasil Dicatat!* \n\n';
             let totalPengeluaran = 0;
             let totalPemasukan = 0;
+            let totalTabungan = 0;
+
+            // Resolve wallet_id untuk tipe tabungan
+            for (const item of items) {
+                if (item.tipe === 'tabungan') {
+                    if (item.wallet_name) {
+                        const wallet = await dbService.findWalletByName(user.id, item.wallet_name);
+                        if (wallet) {
+                            item.wallet_id = wallet.id;
+                            item.nama_dompet_asli = wallet.nama_dompet;
+                        } else {
+                            return await message.reply(`⚠️ Dompet tabungan "${item.wallet_name}" tidak ditemukan. Silakan buat dompet tersebut di Dashboard terlebih dahulu.`);
+                        }
+                    } else {
+                        return await message.reply(`⚠️ Nama dompet tidak dikenali. Sebutkan nama dompet tujuan (contoh: "Nabung dana darurat 100rb").`);
+                    }
+                }
+            }
 
             const insertResult = await dbService.appendTransactions(items.map((item) => ({
                 ...item,
                 rawText: rawTextForDb,
                 telegramUserId: sender,
-                userId: user.id
+                userId: user.id,
+                wallet_id: item.wallet_id || null
             })));
 
             if (insertResult && insertResult.duplicate && insertResult.insertedCount === 0) {
@@ -210,21 +229,33 @@ async function handleMessage(input) {
             }
 
             for (const item of items) {
-                const emoji = item.tipe === 'pemasukan' ? '💰' : '💸';
-                const tipeLabel = item.tipe === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran';
-
-                confirmationText += `${emoji} *${tipeLabel}*: ${item.item} - Rp ${item.harga.toLocaleString('id-ID')}\n`;
+                let emoji = '💸';
+                let tipeLabel = 'Pengeluaran';
+                let displayName = item.item;
 
                 if (item.tipe === 'pemasukan') {
+                    emoji = '💰';
+                    tipeLabel = 'Pemasukan';
                     totalPemasukan += item.harga;
+                } else if (item.tipe === 'tabungan') {
+                    emoji = '🏦';
+                    tipeLabel = 'Tabungan';
+                    displayName = `${item.item} (${item.nama_dompet_asli})`;
+                    totalTabungan += item.harga;
+                    
+                    // Update balance dompet
+                    await dbService.updateWalletBalance(item.wallet_id, item.harga);
                 } else {
                     totalPengeluaran += item.harga;
                 }
+
+                confirmationText += `${emoji} *${tipeLabel}*: ${displayName} - Rp ${item.harga.toLocaleString('id-ID')}\n`;
             }
 
             if (items.length > 1) {
                 if (totalPemasukan > 0) confirmationText += `\n*Total Pemasukan:* Rp ${totalPemasukan.toLocaleString('id-ID')}`;
                 if (totalPengeluaran > 0) confirmationText += `\n*Total Pengeluaran:* Rp ${totalPengeluaran.toLocaleString('id-ID')}`;
+                if (totalTabungan > 0) confirmationText += `\n*Total Tabungan:* Rp ${totalTabungan.toLocaleString('id-ID')}`;
             }
 
             if (insertResult && insertResult.skippedCount > 0) {
@@ -233,6 +264,18 @@ async function handleMessage(input) {
 
             await message.reply(confirmationText);
             logger.info(`Berhasil mencatat ${items.length} item ke Supabase untuk WhatsApp user ${sender}`);
+
+            // Cek Threshold Alert 80%
+            if (totalPengeluaran > 0 && user.target_pengeluaran_bulanan > 0) {
+                const currentExpenses = await dbService.getTotalExpensesThisMonth(user.id);
+                const percentage = currentExpenses / user.target_pengeluaran_bulanan;
+                const currentMonth = new Date().toISOString().substring(0, 7); // Format: YYYY-MM
+                
+                if (percentage >= 0.8 && user.last_alert_month !== currentMonth) {
+                    await message.reply(`⚠️ *Warning!* Pengeluaran Anda bulan ini (Rp ${currentExpenses.toLocaleString('id-ID')}) sudah mencapai ${(percentage * 100).toFixed(0)}% dari target bulanan Anda. Yuk rem sedikit belanjanya!`);
+                    await dbService.updateLastAlertMonth(user.id, currentMonth);
+                }
+            }
         }
 
     } catch (error) {

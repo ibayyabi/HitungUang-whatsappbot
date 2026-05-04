@@ -144,6 +144,89 @@ async function findUsersByDisplayName(displayName) {
     }
 }
 
+async function getTotalExpensesThisMonth(userId) {
+    try {
+        const date = new Date();
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString();
+        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('harga')
+            .eq('user_id', userId)
+            .eq('tipe', 'pengeluaran')
+            .gte('tanggal', firstDay)
+            .lte('tanggal', lastDay);
+
+        if (error) throw error;
+
+        return data.reduce((sum, tx) => sum + (tx.harga || 0), 0);
+    } catch (error) {
+        logger.error(`Gagal mengambil total pengeluaran bulan ini: ${error.message}`);
+        return 0;
+    }
+}
+
+async function updateLastAlertMonth(userId, monthString) {
+    try {
+        const { error } = await supabase
+            .from('profiles')
+            .update({ last_alert_month: monthString })
+            .eq('id', userId);
+
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        logger.error(`Gagal mengupdate last_alert_month: ${error.message}`);
+        return false;
+    }
+}
+
+async function findWalletByName(userId, walletName) {
+    if (!walletName) return null;
+    try {
+        const { data, error } = await supabase
+            .from('wallets')
+            .select('id, nama_dompet, terkumpul, target_nominal')
+            .eq('user_id', userId)
+            .ilike('nama_dompet', `%${walletName.trim()}%`)
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data || null;
+    } catch (error) {
+        logger.error(`Gagal mencari dompet: ${error.message}`);
+        return null;
+    }
+}
+
+async function updateWalletBalance(walletId, additionalAmount) {
+    try {
+        // Fetch current balance
+        const { data: wallet, error: fetchError } = await supabase
+            .from('wallets')
+            .select('terkumpul')
+            .eq('id', walletId)
+            .single();
+
+        if (fetchError) throw fetchError;
+
+        const newBalance = (wallet.terkumpul || 0) + additionalAmount;
+
+        const { error: updateError } = await supabase
+            .from('wallets')
+            .update({ terkumpul: newBalance })
+            .eq('id', walletId);
+
+        if (updateError) throw updateError;
+        return true;
+    } catch (error) {
+        logger.error(`Gagal update saldo dompet: ${error.message}`);
+        return false;
+    }
+}
+
 /**
  * Mencatat transaksi baru ke database Supabase
  * @param {Object} data - Objek transaksi (item, harga, kategori, lokasi, rawText, telegramUserId, userId)
@@ -187,7 +270,8 @@ async function appendTransactions(transactions) {
             kategori: transaction.kategori || DEFAULT_TRANSACTION_CATEGORY,
             lokasi: transaction.lokasi || null,
             catatan_asli: transaction.rawText,
-            tipe: transaction.tipe || DEFAULT_TRANSACTION_TYPE
+            tipe: transaction.tipe || DEFAULT_TRANSACTION_TYPE,
+            wallet_id: transaction.wallet_id || null
         }));
 
         const recentSimilarTransactions = await findRecentSimilarTransactions(userId, payload[0].catatan_asli);
@@ -226,6 +310,10 @@ async function appendTransactions(transactions) {
 module.exports = {
     getUserByTelegramId,
     findUsersByDisplayName,
+    getTotalExpensesThisMonth,
+    updateLastAlertMonth,
+    findWalletByName,
+    updateWalletBalance,
     appendTransaction,
     appendTransactions,
     splitNewTransactions,

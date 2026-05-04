@@ -7,11 +7,14 @@ import Link from 'next/link';
 import {
     ArrowLeft,
     ArrowRight,
+    Briefcase,
     CheckCircle2,
     Loader2,
     LockKeyhole,
     MessageCircle,
     Phone,
+    Target,
+    TrendingUp,
     UserRound
 } from 'lucide-react';
 import {
@@ -34,6 +37,9 @@ function RegisterContent() {
     const [telegramChatId, setTelegramChatId] = useState('');
     const [telegramUsername, setTelegramUsername] = useState('');
     const [name, setName] = useState('');
+    const [statusPekerjaan, setStatusPekerjaan] = useState('karyawan');
+    const [targetPengeluaran, setTargetPengeluaran] = useState('');
+    const [targetPemasukan, setTargetPemasukan] = useState('');
     const [status, setStatus] = useState({
         loading: false,
         message: '',
@@ -82,7 +88,10 @@ function RegisterContent() {
                     telegram_user_id: normalizedWhatsapp,
                     telegram_chat_id: telegramChatId,
                     telegram_username: telegramUsername,
-                    display_name: name.trim()
+                    display_name: name.trim(),
+                    status_pekerjaan: statusPekerjaan,
+                    target_pengeluaran_bulanan: targetPengeluaran ? parseInt(targetPengeluaran, 10) : null,
+                    target_pemasukan_bulanan: targetPemasukan ? parseInt(targetPemasukan, 10) : null
                 })
             });
             const data = await response.json();
@@ -213,6 +222,59 @@ function RegisterContent() {
                             onChange={(event) => setName(event.target.value)}
                             required
                             autoFocus
+                            className="hu-input"
+                        />
+                    </Field>
+
+                    <Field
+                        id="status-pekerjaan"
+                        label="Status Pekerjaan"
+                        icon={<Briefcase className="h-4 w-4 text-black" />}
+                    >
+                        <select
+                            id="status-pekerjaan"
+                            value={statusPekerjaan}
+                            onChange={(event) => setStatusPekerjaan(event.target.value)}
+                            className="hu-input bg-white"
+                        >
+                            <option value="karyawan">Karyawan / Profesional</option>
+                            <option value="wirausaha">Wirausaha / Bisnis</option>
+                            <option value="freelance">Pekerja Lepas / Freelance</option>
+                            <option value="mahasiswa">Mahasiswa / Pelajar</option>
+                            <option value="lainnya">Lainnya</option>
+                        </select>
+                    </Field>
+
+                    <Field
+                        id="target-pengeluaran"
+                        label="Target Pengeluaran Bulanan (Rp)"
+                        icon={<Target className="h-4 w-4 text-black" />}
+                        helper="Batas maksimal pengeluaran bulan ini agar kami bisa mengingatkan Anda."
+                    >
+                        <input
+                            id="target-pengeluaran"
+                            type="number"
+                            min="0"
+                            placeholder="Contoh: 5000000"
+                            value={targetPengeluaran}
+                            onChange={(event) => setTargetPengeluaran(event.target.value)}
+                            className="hu-input"
+                        />
+                    </Field>
+
+                    <Field
+                        id="target-pemasukan"
+                        label="Estimasi Pemasukan Bulanan (Rp)"
+                        icon={<TrendingUp className="h-4 w-4 text-black" />}
+                        helper="Pemasukan rutin untuk menghitung rekomendasi tabungan."
+                    >
+                        <input
+                            id="target-pemasukan"
+                            type="number"
+                            min="0"
+                            placeholder="Contoh: 10000000"
+                            value={targetPemasukan}
+                            onChange={(event) => setTargetPemasukan(event.target.value)}
                             className="hu-input"
                         />
                     </Field>

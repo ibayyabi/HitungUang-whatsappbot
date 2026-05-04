@@ -65,6 +65,10 @@ function normalizeParsedExpense(parsed) {
             tipe: typeof item.tipe === 'string' ? item.tipe.trim().toLowerCase() : ''
         };
 
+        if (normalizedItem.tipe === 'tabungan' && typeof item.wallet_name === 'string') {
+            normalizedItem.wallet_name = item.wallet_name.trim();
+        }
+
         if (!normalizedItem.item) {
             throw new Error('AI transaction item is missing name');
         }
@@ -78,7 +82,13 @@ function normalizeParsedExpense(parsed) {
         }
 
         if (!isValidTransactionCategory(normalizedItem.kategori)) {
-            normalizedItem.kategori = normalizedItem.tipe === 'pemasukan' ? 'lainnya_masuk' : DEFAULT_TRANSACTION_CATEGORY;
+            if (normalizedItem.tipe === 'pemasukan') {
+                normalizedItem.kategori = 'lainnya_masuk';
+            } else if (normalizedItem.tipe === 'tabungan') {
+                normalizedItem.kategori = 'tabungan';
+            } else {
+                normalizedItem.kategori = DEFAULT_TRANSACTION_CATEGORY;
+            }
         }
 
         return normalizedItem;

@@ -36,8 +36,22 @@ export async function GET() {
         }, { status: 500 });
     }
 
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('status_pekerjaan, target_pengeluaran_bulanan, target_pemasukan_bulanan')
+        .eq('id', userData.user.id)
+        .single();
+
+    const { data: wallets } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', userData.user.id)
+        .order('created_at', { ascending: false });
+
     return Response.json({
         success: true,
+        profile: profile || null,
+        wallets: wallets || [],
         ...aggregateDashboardSummary(data || [])
     });
 }

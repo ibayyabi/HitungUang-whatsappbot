@@ -19,7 +19,10 @@ export async function POST(request) {
             telegram_user_id,
             telegram_chat_id,
             telegram_username,
-            display_name
+            display_name,
+            status_pekerjaan,
+            target_pengeluaran_bulanan,
+            target_pemasukan_bulanan
         } = body;
 
         if (!telegram_user_id || !display_name) {
@@ -41,7 +44,10 @@ export async function POST(request) {
                 telegram_user_id: normalizedTelegramUserId,
                 telegram_chat_id: telegram_chat_id ? String(telegram_chat_id) : null,
                 telegram_username: telegram_username ? String(telegram_username) : null,
-                display_name
+                display_name,
+                status_pekerjaan,
+                target_pengeluaran_bulanan,
+                target_pemasukan_bulanan
             }
         });
 
@@ -61,7 +67,10 @@ export async function POST(request) {
                 telegram_user_id: normalizedTelegramUserId,
                 telegram_chat_id: telegram_chat_id ? String(telegram_chat_id) : null,
                 telegram_username: telegram_username ? String(telegram_username) : null,
-                display_name
+                display_name,
+                status_pekerjaan,
+                target_pengeluaran_bulanan,
+                target_pemasukan_bulanan
             });
 
         if (profileError) throw profileError;

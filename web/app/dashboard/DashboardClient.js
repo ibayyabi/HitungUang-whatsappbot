@@ -13,6 +13,7 @@ import { BalanceMysteryCard } from '../../components/dashboard/BalanceMysteryCar
 import { CategorySummary } from '../../components/dashboard/CategorySummary';
 import { ExpenseCharts } from '../../components/dashboard/ExpenseCharts';
 import { TransactionTable } from '../../components/dashboard/TransactionTable';
+import { WalletSection } from '../../components/dashboard/WalletSection';
 import { Button, ButtonLink, Surface } from '../../components/ui/Primitives';
 
 const INITIAL_STATE = {
@@ -26,7 +27,9 @@ const INITIAL_STATE = {
     dailySeries: [],
     weeklySeries: [],
     categories: [],
-    transactions: []
+    transactions: [],
+    profile: null,
+    wallets: []
 };
 
 function formatCurrency(value) {
@@ -84,7 +87,9 @@ export default function DashboardClient({ user }) {
                 dailySeries: payload.dailySeries || [],
                 weeklySeries: payload.weeklySeries || [],
                 categories: payload.categories || [],
-                transactions: payload.transactions || []
+                transactions: payload.transactions || [],
+                profile: payload.profile || null,
+                wallets: payload.wallets || []
             });
             setStatus({ loading: false, message: '' });
         } catch (error) {
@@ -164,6 +169,7 @@ export default function DashboardClient({ user }) {
             <div className="dashboard-grid">
                 <aside className="flex flex-col gap-4">
                     <CategorySummary categories={summary.categories} loading={status.loading} />
+                    <WalletSection profile={summary.profile} wallets={summary.wallets} loading={status.loading} onWalletCreated={loadSummary} />
                     <Surface className="p-5 md:p-6">
                         <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#efefef] text-black">
                             <Wallet className="h-5 w-5" />

@@ -1,4 +1,4 @@
-const TRANSACTION_TYPES = ['pengeluaran', 'pemasukan'];
+const TRANSACTION_TYPES = ['pengeluaran', 'pemasukan', 'tabungan'];
 
 const EXPENSE_CATEGORIES = [
     'makan',
@@ -18,6 +18,10 @@ const INCOME_CATEGORIES = [
     'transfer_masuk',
     'investasi',
     'lainnya_masuk'
+];
+
+const SAVING_CATEGORIES = [
+    'tabungan'
 ];
 
 const DEFAULT_TRANSACTION_CATEGORY = 'lainnya';
@@ -54,13 +58,14 @@ function isValidTransactionType(value) {
 
 function isValidTransactionCategory(value) {
     const normalized = String(value || '').trim().toLowerCase();
-    return EXPENSE_CATEGORIES.includes(normalized) || INCOME_CATEGORIES.includes(normalized);
+    return EXPENSE_CATEGORIES.includes(normalized) || INCOME_CATEGORIES.includes(normalized) || SAVING_CATEGORIES.includes(normalized);
 }
 
 module.exports = {
     TRANSACTION_TYPES,
     EXPENSE_CATEGORIES,
     INCOME_CATEGORIES,
+    SAVING_CATEGORIES,
     DEFAULT_TRANSACTION_CATEGORY,
     DEFAULT_TRANSACTION_TYPE,
     TRANSACTION_FIELDS,
