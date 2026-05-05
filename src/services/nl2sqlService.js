@@ -216,7 +216,7 @@ ATURAN KERAS:
 Pertanyaan user: "${cleanText}"
     `;
 
-    const model = aiParser.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = aiParser.genAI.getGenerativeModel({ model: "gemma-3-27b-it" });
     const aiResponse = await model.generateContent(prompt);
     const resultText = aiResponse.response.text().replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(resultText);
