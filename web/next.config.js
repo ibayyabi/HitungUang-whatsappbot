@@ -7,6 +7,11 @@ const nextConfig = {
     },
     outputFileTracingRoot: path.join(__dirname, '../'),
     webpack: (config, { dev }) => {
+        config.resolve.modules = [
+            path.resolve(__dirname, 'node_modules'),
+            ...(config.resolve.modules || []),
+        ];
+
         // Enable minification in production
         if (!dev) {
             config.optimization.minimize = true;
