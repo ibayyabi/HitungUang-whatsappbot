@@ -8,6 +8,7 @@ const PROFILE_FIELDS = [
     'target_pengeluaran_bulanan',
     'target_pemasukan_bulanan',
     'last_alert_month',
+    'is_onboarded',
     'created_at'
 ];
 

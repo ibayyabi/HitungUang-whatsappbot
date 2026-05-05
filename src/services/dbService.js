@@ -231,6 +231,21 @@ async function updateLastAlertMonth(userId, monthString) {
     }
 }
 
+async function setOnboarded(userId) {
+    try {
+        const { error } = await supabase
+            .from('profiles')
+            .update({ is_onboarded: true })
+            .eq('id', userId);
+
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        logger.error(`Gagal mengupdate is_onboarded: ${error.message}`);
+        return false;
+    }
+}
+
 async function listActiveWallets(userId) {
     try {
         const { data, error } = await supabase
@@ -424,6 +439,7 @@ module.exports = {
     findWalletByName,
     incrementWalletBalance,
     updateWalletBalance,
+    setOnboarded,
     appendTransaction,
     appendTransactions,
     splitNewTransactions,

@@ -62,6 +62,29 @@ function buildHelpText() {
     ].join('\n');
 }
 
+function buildOnboardingText(userName) {
+    const name = userName || 'Sobat Cuan';
+    return [
+        `Halo ${name}! Selamat datang di *HitungUang Bot*! 🚀`,
+        '',
+        'Saya adalah asisten keuangan pintar Anda. Saya akan membantu Anda mencatat setiap pemasukan dan pengeluaran langsung dari WhatsApp.',
+        '',
+        '💡 *Cara Mencatat Transaksi:*',
+        'Cukup kirim pesan natural, contoh:',
+        '• "Bakso 15rb" (Otomatis jadi pengeluaran)',
+        '• "Gaji freelance 2jt" (Otomatis jadi pemasukan)',
+        '• "Nabung Dana Darurat 500rb" (Masuk ke dompet tabungan)',
+        '',
+        '📸 *Kirim Foto Struk (coming soon):*',
+        'Saya juga bisa membaca struk belanja Anda lewat foto!',
+        '',
+        '🔗 *Akses Dashboard:*',
+        'Ketik *dashboard* kapan saja untuk mendapatkan link masuk ke dashboard visual Anda.',
+        '',
+        'Selamat mengelola keuangan dengan lebih cerdas! ✨'
+    ].join('\n');
+}
+
 async function replyUnregistered(message) {
     const registerUrl = buildRegisterUrl(message);
     const welcomeText = [
@@ -136,8 +159,14 @@ async function handleMessage(input) {
             return await replyUnregistered(message);
         }
 
-        if (isStartCommand(originalText)) {
-            return await message.reply(`Halo ${user.display_name || message.displayName || 'User'}! Nomor WhatsApp Anda sudah terhubung. Kirim "bakso 15rb" untuk mencatat transaksi, atau /dashboard untuk membuka dashboard.`);
+        if (!user.is_onboarded) {
+            await dbService.setOnboarded(user.id);
+            await message.reply(buildOnboardingText(user.display_name || message.displayName));
+            if (isStartCommand(originalText)) {
+                return;
+            }
+        } else if (isStartCommand(originalText)) {
+            return await message.reply(buildOnboardingText(user.display_name || message.displayName));
         }
 
         if (isHelpCommand(originalText)) {
