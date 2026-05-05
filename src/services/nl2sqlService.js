@@ -216,7 +216,8 @@ ATURAN KERAS:
 Pertanyaan user: "${cleanText}"
     `;
 
-    const aiResponse = await aiParser.model.generateContent(prompt);
+    const model = aiParser.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const aiResponse = await model.generateContent(prompt);
     const resultText = aiResponse.response.text().replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(resultText);
     return parsed.sql;
@@ -237,7 +238,10 @@ async function processNLQuery(message, telegramUserId, user) {
         }
 
         const cleanText = sanitizeInput(text);
-        const sql = await generateSQL(cleanText, userId);
+        let sql = await generateSQL(cleanText, userId);
+
+        // Bersihkan semicolon di akhir agar tidak ditolak validator
+        sql = sql.trim().replace(/;$/, '');
 
         logger.info(`Generated SQL for Telegram user ${telegramUserId}: ${sql}`);
 
