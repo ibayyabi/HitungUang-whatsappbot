@@ -1,6 +1,6 @@
 # Chatbot Current State
 
-Tanggal review: 2026-05-04
+Tanggal review: 2026-05-05
 
 ## Ringkasan
 
@@ -20,6 +20,8 @@ Runtime aktif memakai WhatsApp. Field internal masih memakai nama `telegram_*` k
 - Classifier: `src/utils/messageClassifier.js`
 - Prompt parser: `src/config/prompts.js`
 - Rate limiter: `src/utils/rateLimiter.js`
+- Date helper: `src/utils/dateHelper.js`
+- Alert helper: `src/utils/alertHelper.js`
 - Tests: `src/__tests__/`
 
 ## Runtime Dan Endpoint
@@ -129,6 +131,13 @@ Mapping field:
 | `tipe` | `tipe` |
 
 Batch insert didukung lewat `appendTransactions()`.
+
+## Alerts & Target Bulanan
+
+Bot memeriksa persentase pengeluaran terhadap `target_pengeluaran_bulanan` yang diatur pengguna lewat web.
+- Logika *spending alert* dienkapsulasi dalam `src/utils/alertHelper.js`.
+- Perhitungan total pengeluaran bulan ini diproses secara aman menggunakan zona waktu lokal `Asia/Jakarta` (`src/utils/dateHelper.js`).
+- Notifikasi terpicu ketika total pengeluaran menyentuh ambang batas 80% dan 100%, serta memblokir notifikasi ganda di bulan yang sama untuk mencegah *spam*.
 
 ## Idempotency
 

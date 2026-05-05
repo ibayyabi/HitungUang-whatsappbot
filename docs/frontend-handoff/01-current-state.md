@@ -1,5 +1,7 @@
 # Current State
 
+Tanggal review: 2026-05-05
+
 ## Stack Saat Ini
 
 - Bot backend: Node.js HTTP server di root project.
@@ -45,11 +47,14 @@
 - Magic link verification ada di `/verify`.
 - Dashboard ada di `/dashboard`.
 - Dashboard fetch data dari `GET /api/dashboard/summary`.
-- Komponen dashboard saat ini:
-  - Balance card.
-  - Category summary.
-  - Daily/weekly charts.
+- Komponen dashboard saat ini (bergaya *Dia Browser*):
+  - Balance card (Hero stat).
+  - Metric cards (Horizontal snap carousel di mobile).
+  - Profile Target Form (Collapsible accordion).
+  - Category summary & Wallet section.
+  - Daily/weekly charts (dengan ukuran dinamis dan format sumbu Y cerdas).
   - Transaction table.
+  - Tombol Export Excel (.xlsx) mult-sheet.
 
 ## Catatan Inkonsistensi Naming
 

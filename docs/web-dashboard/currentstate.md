@@ -1,6 +1,6 @@
 # Web Dashboard Current State
 
-Tanggal review: 2026-05-04
+Tanggal review: 2026-05-05
 
 ## Ringkasan
 
@@ -28,6 +28,7 @@ Web dashboard adalah aplikasi Next.js di folder `web/`. Web menyediakan landing 
 - Tailwind CSS 4
 - Lucide React
 - Recharts
+- xlsx (Ekspor Excel)
 
 ## Route Map
 
@@ -133,12 +134,16 @@ Response summary:
 - `balance.todayIncome`
 - `balance.todayExpense`
 - `balance.todayRemaining`
+- `balance.availableMoney`
 - `balance.weekIncome`
 - `balance.weekExpense`
+- `balance.monthSavings`
 - `dailySeries`: 7 hari terakhir.
 - `weeklySeries`: 4 minggu terakhir.
 - `categories`: total dan count pengeluaran per kategori.
 - `transactions`: rows transaksi dari Supabase.
+- `profile`: data pengguna (termasuk target bulanan).
+- `wallets`: daftar dompet/pos keuangan.
 
 Agregasi berada di `shared/contracts/dashboardSummary.js`.
 
@@ -146,11 +151,16 @@ Agregasi berada di `shared/contracts/dashboardSummary.js`.
 
 Komponen:
 
-- `BalanceMysteryCard`: sisa hari ini.
-- `MetricCard`: pemasukan hari ini, pengeluaran hari ini, pengeluaran minggu ini.
+- `BalanceMysteryCard`: sisa uang (berdiri sendiri *full-width* di atas).
+- `MetricCard`: barisan metrik yang menggunakan *horizontal snap carousel* di mobile dan *Grid* di desktop.
+- `ProfileTargetCard`: form target bulanan yang kini berupa panel *accordion* (bisa dilipat).
 - `CategorySummary`: ranking kategori pengeluaran.
-- `ExpenseCharts`: bar chart harian dan mingguan.
+- `WalletSection`: rincian saldo dan sisa target per dompet.
+- `ExpenseCharts`: bar chart harian dan mingguan dengan ukuran bar dinamis, legenda, format cerdas, dan efek *glassmorphism*.
 - `TransactionTable`: riwayat transaksi desktop dan mobile.
+
+Fitur tambahan:
+- **Export Excel**: Tombol untuk mengunduh `.xlsx` dengan multi-sheet (Ringkasan, Kategori, Transaksi) di sisi *client*.
 
 State yang sudah ada:
 
@@ -174,7 +184,7 @@ Root `.env` dipakai bot. `web/.env` dibutuhkan saat menjalankan Next.js dari fol
 
 ## Known Gaps
 
-- Dashboard masih read-only; belum ada tambah, edit, hapus, filter, export, atau search transaksi.
+- Dashboard masih read-only; belum ada tambah, edit, hapus, filter, atau search transaksi.
 - Tidak ada logout UI.
 - Nomor WhatsApp bot masih hardcoded.
 - Summary API mengandalkan RLS tanpa filter user eksplisit.

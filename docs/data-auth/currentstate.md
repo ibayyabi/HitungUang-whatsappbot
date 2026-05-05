@@ -1,6 +1,6 @@
 # Data And Auth Current State
 
-Tanggal review: 2026-05-04
+Tanggal review: 2026-05-05
 
 ## Ringkasan
 
@@ -30,6 +30,9 @@ Field:
 - `telegram_chat_id`: TEXT optional.
 - `telegram_username`: TEXT optional.
 - `display_name`: TEXT.
+- `status_pekerjaan`: TEXT optional.
+- `target_pengeluaran_bulanan`: BIGINT optional.
+- `target_pemasukan_bulanan`: BIGINT optional.
 - `created_at`: TIMESTAMPTZ.
 
 RLS:
@@ -138,6 +141,7 @@ Dashboard guard memakai `supabase.auth.getUser()`.
 - Agregasi balance harian dan mingguan.
 - Series 7 hari dan 4 minggu.
 - Ranking kategori pengeluaran.
+- Kalkulasi target dan alokasi dompet.
 
 `shared/contracts/profile.js`:
 
