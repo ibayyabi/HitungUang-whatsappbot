@@ -6,6 +6,7 @@ import {
     Bar,
     BarChart,
     CartesianGrid,
+    Legend,
     ResponsiveContainer,
     Tooltip,
     XAxis,
@@ -14,6 +15,17 @@ import {
 
 function formatCurrency(value) {
     return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
+}
+
+function compactCurrency(value) {
+    const num = Number(value || 0);
+    if (num >= 1000000) {
+        return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')} Jt`;
+    }
+    if (num >= 1000) {
+        return `${(num / 1000).toFixed(0)} Rb`;
+    }
+    return String(num);
 }
 
 function hasChartData(data) {
@@ -26,7 +38,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     }
 
     return (
-        <div className="rounded-[18px] bg-white p-3 shadow-[var(--shadow-sm)]">
+        <div className="rounded-[18px] border border-white/40 bg-white/70 p-3 shadow-lg backdrop-blur-md">
             <p className="mb-2 text-xs font-medium text-[#636363]">{label}</p>
             {payload.map((entry) => (
                 <div key={entry.dataKey} className="flex items-center gap-3 py-1">
@@ -81,22 +93,28 @@ function ChartBlock({ title, data, xKey }) {
                                 axisLine={false}
                                 tickLine={false}
                                 tick={{ fontSize: 11, fontWeight: 400, fill: '#636363' }}
-                                tickFormatter={(value) => `${Math.round(value / 1000)}k`}
+                                tickFormatter={compactCurrency}
                             />
-                            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8f8f8' }} />
+                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
+                            <Legend 
+                                verticalAlign="top" 
+                                height={36} 
+                                iconType="circle"
+                                wrapperStyle={{ fontSize: '12px', color: '#636363' }}
+                            />
                             <Bar
                                 name="Pengeluaran"
                                 dataKey="pengeluaran"
                                 fill="#edb09c"
-                                radius={[10, 10, 0, 0]}
-                                barSize={28}
+                                radius={[8, 8, 0, 0]}
+                                maxBarSize={32}
                             />
                             <Bar
                                 name="Pemasukan"
                                 dataKey="pemasukan"
                                 fill="#75ddd1"
-                                radius={[10, 10, 0, 0]}
-                                barSize={28}
+                                radius={[8, 8, 0, 0]}
+                                maxBarSize={32}
                             />
                         </BarChart>
                     </ResponsiveContainer>

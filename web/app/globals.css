@@ -720,6 +720,15 @@ textarea:focus-visible {
 .reveal-sequence > *:nth-child(5) { animation-delay: 0.5s; }
 .reveal-sequence > *:nth-child(6) { animation-delay: 0.6s; }
 
+/* Hide scrollbar for horizontal carousels */
+.hide-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+}
+
 /* Enhanced Typography Animations */
 @keyframes text-reveal {
     from {
