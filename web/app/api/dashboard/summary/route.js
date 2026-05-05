@@ -1,9 +1,11 @@
 import dashboardSummary from '../../../../../shared/contracts/dashboardSummary';
+import walletContracts from '../../../../../shared/contracts/wallets';
 import { createClient } from '../../../../lib/supabase/server';
 
 const { aggregateDashboardSummary } = dashboardSummary;
+const { buildWalletSummaries } = walletContracts;
 
-const SELECT_FIELDS = 'id,item,harga,kategori,lokasi,catatan_asli,tanggal,tipe,created_at';
+const SELECT_FIELDS = 'id,item,harga,kategori,lokasi,catatan_asli,tanggal,tipe,wallet_id,created_at';
 
 function daysAgo(days) {
     const date = new Date();
@@ -25,6 +27,7 @@ export async function GET() {
     const { data, error } = await supabase
         .from('transactions')
         .select(SELECT_FIELDS)
+        .eq('user_id', userData.user.id)
         .gte('tanggal', daysAgo(90))
         .order('tanggal', { ascending: false })
         .limit(250);
@@ -38,7 +41,7 @@ export async function GET() {
 
     const { data: profile } = await supabase
         .from('profiles')
-        .select('status_pekerjaan, target_pengeluaran_bulanan, target_pemasukan_bulanan')
+        .select('status_pekerjaan, target_pengeluaran_bulanan, target_pemasukan_bulanan, last_alert_month')
         .eq('id', userData.user.id)
         .single();
 
@@ -46,12 +49,14 @@ export async function GET() {
         .from('wallets')
         .select('*')
         .eq('user_id', userData.user.id)
-        .order('created_at', { ascending: false });
+        .is('archived_at', null)
+        .order('priority_rank', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true });
 
     return Response.json({
         success: true,
         profile: profile || null,
-        wallets: wallets || [],
+        wallets: buildWalletSummaries(wallets || [], profile || {}),
         ...aggregateDashboardSummary(data || [])
     });
 }

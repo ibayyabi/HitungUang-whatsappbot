@@ -113,7 +113,9 @@ function createMessageAdapter(payload) {
     const senderId = getSenderId(payload);
     const mediaUrl = getMediaUrl(payload);
     const mediaType = inferMediaType(payload, mediaUrl);
-    const inboxId = payload.inboxid || payload.inbox_id || payload.id || 0;
+    const inboxId = payload.inboxid || payload.inbox_id || payload.id || payload.id_message || 0;
+
+    logger.info(`Capturing message for ${senderId}. InboxId found: ${inboxId} (Keys: ${Object.keys(payload).join(', ')})`);
 
     return {
         text: getIncomingText(payload),
@@ -179,6 +181,7 @@ async function processWebhook(request, response, requestUrl) {
     }
 
     const payload = await parseRequestBody(request);
+    logger.info(`Incoming Fonnte Webhook Payload: ${JSON.stringify(payload)}`);
     const message = createMessageAdapter(payload);
 
     if (!message.senderId) {

@@ -10,19 +10,62 @@ export async function POST(request) {
         }
 
         const body = await request.json();
-        const { nama_dompet, target_nominal } = body;
+        const {
+            nama_dompet,
+            target_nominal,
+            jenis_dompet = 'custom',
+            priority_rank = null,
+            monthly_target = null,
+            is_default_income_wallet = false
+        } = body;
 
-        if (!nama_dompet || typeof target_nominal !== 'number') {
+        const normalizedName = typeof nama_dompet === 'string' ? nama_dompet.trim() : '';
+        const targetAmount = Number(target_nominal);
+        const monthlyTarget = monthly_target === null || monthly_target === '' ? null : Number(monthly_target);
+        const priorityRank = priority_rank === null || priority_rank === '' ? null : Number(priority_rank);
+
+        if (!normalizedName || !Number.isFinite(targetAmount) || targetAmount <= 0) {
             return Response.json({ success: false, message: 'Data tidak lengkap' }, { status: 400 });
+        }
+
+        if ((monthlyTarget !== null && (!Number.isFinite(monthlyTarget) || monthlyTarget < 0)) ||
+            (priorityRank !== null && (!Number.isInteger(priorityRank) || priorityRank <= 0))) {
+            return Response.json({ success: false, message: 'Data dompet tidak valid.' }, { status: 400 });
+        }
+
+        const { data: duplicate, error: duplicateError } = await supabase
+            .from('wallets')
+            .select('id')
+            .eq('user_id', userData.user.id)
+            .is('archived_at', null)
+            .ilike('nama_dompet', normalizedName)
+            .limit(1);
+
+        if (duplicateError) throw duplicateError;
+        if (duplicate && duplicate.length > 0) {
+            return Response.json({ success: false, message: 'Nama dompet sudah dipakai.' }, { status: 409 });
+        }
+
+        if (is_default_income_wallet) {
+            const { error: unsetError } = await supabase
+                .from('wallets')
+                .update({ is_default_income_wallet: false })
+                .eq('user_id', userData.user.id);
+
+            if (unsetError) throw unsetError;
         }
 
         const { data, error } = await supabase
             .from('wallets')
             .insert([{
                 user_id: userData.user.id,
-                nama_dompet: nama_dompet.trim(),
-                target_nominal,
-                terkumpul: 0
+                nama_dompet: normalizedName,
+                target_nominal: Math.round(targetAmount),
+                terkumpul: 0,
+                jenis_dompet,
+                priority_rank: priorityRank,
+                monthly_target: monthlyTarget === null ? null : Math.round(monthlyTarget),
+                is_default_income_wallet: Boolean(is_default_income_wallet)
             }])
             .select()
             .single();

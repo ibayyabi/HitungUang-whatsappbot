@@ -6,9 +6,15 @@ const nextConfig = {
         externalDir: true,
     },
     outputFileTracingRoot: path.join(__dirname, '../'),
-    webpack: (config) => {
-        config.optimization.minimize = false;
+    webpack: (config, { dev }) => {
+        // Enable minification in production
+        if (!dev) {
+            config.optimization.minimize = true;
+        }
         return config;
+    },
+    images: {
+        formats: ['image/avif', 'image/webp'],
     },
 };
 

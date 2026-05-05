@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const logger = require('../utils/logger');
+const { getJakartaMonthRange } = require('../utils/jakartaDate');
 const {
     DEFAULT_TRANSACTION_CATEGORY,
     DEFAULT_TRANSACTION_TYPE,
@@ -49,6 +50,7 @@ function createTransactionSignature(transaction) {
         kategori: normalizeComparableValue(transaction.kategori || 'lainnya'),
         lokasi: normalizeComparableValue(transaction.lokasi || null),
         tipe: normalizeComparableValue(transaction.tipe || 'pengeluaran'),
+        wallet_id: normalizeComparableValue(transaction.wallet_id || null),
         rawText: normalizeComparableValue(transaction.catatan_asli || transaction.rawText || '')
     });
 }
@@ -151,26 +153,66 @@ async function findUsersByDisplayName(displayName) {
     }
 }
 
-async function getTotalExpensesThisMonth(userId) {
+async function getTotalExpensesThisMonth(userId, now = new Date()) {
     try {
-        const date = new Date();
-        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString();
-        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+        const { startIso, endIso } = getJakartaMonthRange(now);
 
         const { data, error } = await supabase
             .from('transactions')
             .select('harga')
             .eq('user_id', userId)
             .eq('tipe', 'pengeluaran')
-            .gte('tanggal', firstDay)
-            .lte('tanggal', lastDay);
+            .gte('tanggal', startIso)
+            .lte('tanggal', endIso);
 
         if (error) throw error;
 
-        return data.reduce((sum, tx) => sum + (tx.harga || 0), 0);
+        const total = data.reduce((sum, tx) => sum + (tx.harga || 0), 0);
+        logger.info(`Total expenses for user ${userId} this month: ${total}`);
+        return total;
     } catch (error) {
         logger.error(`Gagal mengambil total pengeluaran bulan ini: ${error.message}`);
-        return 0;
+        throw error;
+    }
+}
+
+async function getMonthlyAllocationSummary(userId, now = new Date()) {
+    try {
+        const { startIso, endIso } = getJakartaMonthRange(now);
+
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('harga,tipe')
+            .eq('user_id', userId)
+            .gte('tanggal', startIso)
+            .lte('tanggal', endIso);
+
+        if (error) throw error;
+
+        const summary = {
+            monthIncome: 0,
+            monthExpense: 0,
+            monthSavings: 0,
+            availableMoney: 0
+        };
+
+        for (const tx of data || []) {
+            const amount = Number(tx.harga || 0);
+            if (tx.tipe === 'pemasukan') {
+                summary.monthIncome += amount;
+            } else if (tx.tipe === 'tabungan') {
+                summary.monthSavings += amount;
+            } else {
+                summary.monthExpense += amount;
+            }
+        }
+
+        summary.availableMoney = summary.monthIncome - summary.monthExpense - summary.monthSavings;
+        logger.info(`Monthly allocation for user ${userId}: income=${summary.monthIncome}, expense=${summary.monthExpense}, savings=${summary.monthSavings}, available=${summary.availableMoney}`);
+        return summary;
+    } catch (error) {
+        logger.error(`Gagal mengambil ringkasan alokasi bulanan: ${error.message}`);
+        throw error;
     }
 }
 
@@ -189,13 +231,52 @@ async function updateLastAlertMonth(userId, monthString) {
     }
 }
 
+async function listActiveWallets(userId) {
+    try {
+        const { data, error } = await supabase
+            .from('wallets')
+            .select('*')
+            .eq('user_id', userId)
+            .is('archived_at', null)
+            .order('priority_rank', { ascending: true, nullsFirst: false })
+            .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        logger.error(`Gagal mengambil daftar dompet: ${error.message}`);
+        return [];
+    }
+}
+
+async function findWalletByNameExact(userId, walletName) {
+    if (!walletName) return null;
+    try {
+        const { data, error } = await supabase
+            .from('wallets')
+            .select('*')
+            .eq('user_id', userId)
+            .is('archived_at', null)
+            .ilike('nama_dompet', walletName.trim())
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        return data || null;
+    } catch (error) {
+        logger.error(`Gagal mencari dompet exact: ${error.message}`);
+        return null;
+    }
+}
+
 async function findWalletByName(userId, walletName) {
     if (!walletName) return null;
     try {
         const { data, error } = await supabase
             .from('wallets')
-            .select('id, nama_dompet, terkumpul, target_nominal')
+            .select('*')
             .eq('user_id', userId)
+            .is('archived_at', null)
             .ilike('nama_dompet', `%${walletName.trim()}%`)
             .limit(1)
             .single();
@@ -204,6 +285,22 @@ async function findWalletByName(userId, walletName) {
         return data || null;
     } catch (error) {
         logger.error(`Gagal mencari dompet: ${error.message}`);
+        return null;
+    }
+}
+
+async function incrementWalletBalance(walletId, userId, additionalAmount) {
+    try {
+        const { data, error } = await supabase.rpc('increment_wallet_balance', {
+            p_wallet_id: walletId,
+            p_user_id: userId,
+            p_amount: additionalAmount
+        });
+
+        if (error) throw error;
+        return data || true;
+    } catch (error) {
+        logger.error(`Gagal increment saldo dompet: ${error.message}`);
         return null;
     }
 }
@@ -295,9 +392,10 @@ async function appendTransactions(transactions) {
             };
         }
 
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('transactions')
-            .insert(newTransactions);
+            .insert(newTransactions)
+            .select('id,item,harga,kategori,lokasi,catatan_asli,tanggal,tipe,wallet_id,created_at');
 
         if (error) throw error;
 
@@ -306,7 +404,8 @@ async function appendTransactions(transactions) {
             registered: true,
             duplicate: skippedCount > 0,
             insertedCount: newTransactions.length,
-            skippedCount
+            skippedCount,
+            insertedTransactions: data || []
         };
     } catch (error) {
         logger.error(`Gagal mencatat ke Supabase: ${error.message}`);
@@ -318,8 +417,12 @@ module.exports = {
     getUserByTelegramId,
     findUsersByDisplayName,
     getTotalExpensesThisMonth,
+    getMonthlyAllocationSummary,
     updateLastAlertMonth,
+    listActiveWallets,
+    findWalletByNameExact,
     findWalletByName,
+    incrementWalletBalance,
     updateWalletBalance,
     appendTransaction,
     appendTransactions,

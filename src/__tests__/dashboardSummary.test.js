@@ -38,6 +38,15 @@ describe('dashboard summary aggregation', () => {
             tipe: 'pengeluaran',
             tanggal: new Date(2026, 3, 24, 10, 0, 0).toISOString(),
             catatan_asli: 'kopi 20rb'
+        },
+        {
+            id: '5',
+            item: 'Nabung Dana Darurat',
+            harga: 50000,
+            kategori: 'tabungan',
+            tipe: 'tabungan',
+            tanggal: new Date(2026, 4, 1, 10, 0, 0).toISOString(),
+            catatan_asli: 'nabung dana darurat 50rb'
         }
     ];
 
@@ -49,7 +58,13 @@ describe('dashboard summary aggregation', () => {
             todayExpense: 15000,
             todayRemaining: 85000,
             weekIncome: 100000,
-            weekExpense: 45000
+            weekExpense: 45000,
+            todaySavings: 50000,
+            weekSavings: 50000,
+            monthIncome: 100000,
+            monthExpense: 15000,
+            monthSavings: 50000,
+            availableMoney: 35000
         });
     });
 
@@ -60,11 +75,13 @@ describe('dashboard summary aggregation', () => {
 
         expect(today).toMatchObject({
             pengeluaran: 15000,
-            pemasukan: 100000
+            pemasukan: 100000,
+            tabungan: 50000
         });
         expect(currentWeek).toMatchObject({
             pengeluaran: 45000,
-            pemasukan: 100000
+            pemasukan: 100000,
+            tabungan: 50000
         });
     });
 

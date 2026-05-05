@@ -14,8 +14,9 @@ const {
 
 describe('shared contracts', () => {
     test('menyediakan enum tipe transaksi yang valid', () => {
-        expect(TRANSACTION_TYPES).toEqual(['pengeluaran', 'pemasukan']);
+        expect(TRANSACTION_TYPES).toEqual(['pengeluaran', 'pemasukan', 'tabungan']);
         expect(isValidTransactionType('PENGELUARAN')).toBe(true);
+        expect(isValidTransactionType('tabungan')).toBe(true);
         expect(isValidTransactionType('refund')).toBe(false);
     });
 
@@ -27,7 +28,18 @@ describe('shared contracts', () => {
     });
 
     test('mendefinisikan field profile dan transaction untuk referensi lintas app', () => {
-        expect(PROFILE_FIELDS).toEqual(['id', 'telegram_user_id', 'telegram_chat_id', 'telegram_username', 'display_name', 'created_at']);
+        expect(PROFILE_FIELDS).toEqual([
+            'id',
+            'telegram_user_id',
+            'telegram_chat_id',
+            'telegram_username',
+            'display_name',
+            'status_pekerjaan',
+            'target_pengeluaran_bulanan',
+            'target_pemasukan_bulanan',
+            'last_alert_month',
+            'created_at'
+        ]);
         expect(TRANSACTION_FIELDS.database).toContain('catatan_asli');
         expect(TRANSACTION_FIELDS.input).toContain('telegramUserId');
     });

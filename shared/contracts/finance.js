@@ -38,6 +38,7 @@ const TRANSACTION_FIELDS = {
         'catatan_asli',
         'tanggal',
         'tipe',
+        'wallet_id',
         'created_at'
     ],
     input: [
@@ -47,6 +48,7 @@ const TRANSACTION_FIELDS = {
         'lokasi',
         'rawText',
         'tipe',
+        'wallet_id',
         'telegramUserId',
         'userId'
     ]

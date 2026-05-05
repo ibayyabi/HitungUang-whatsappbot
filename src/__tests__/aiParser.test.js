@@ -52,4 +52,15 @@ describe('aiParser helpers', () => {
             tipe: 'pengeluaran'
         })).toThrow('AI transaction item has invalid amount');
     });
+
+    test('menormalkan harga string dengan satuan miliyar', () => {
+        const result = normalizeParsedExpense({
+            item: 'Bonus Investasi',
+            harga: '2 miliyar',
+            kategori: 'investasi',
+            tipe: 'pemasukan'
+        });
+
+        expect(result.harga).toBe(2000000000);
+    });
 });

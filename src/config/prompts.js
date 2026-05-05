@@ -3,7 +3,7 @@ module.exports = {
 
 ATURAN:
 1. Output HANYA JSON murni, tanpa markdown (\`\`\`), tanpa penjelasan.
-2. Singkatan harga: "rb"/"ribu" = ×1000, "k" = ×1000, "jt"/"juta" = ×1000000, "milyar"/"miliar"/"m" = ×1000000000. Contoh: 50rb -> 50000, 1.2jt -> 1200000, 2milyar -> 2000000000.
+2. Singkatan harga: "rb"/"ribu" = ×1000, "k" = ×1000, "jt"/"juta" = ×1000000, "miliyar"/"milyar"/"miliar"/"m" = ×1000000000. Contoh: 50rb -> 50000, 1.2jt -> 1200000, 2 miliyar -> 2000000000.
 3. Field yang wajib: 
    - "item" (string): nama barang/jasa/sumber pendapatan/nama tabungan.
    - "harga" (number): nominal jumlah uang. WAJIB berupa angka murni tanpa titik, koma, atau satuan (misal: 2000000).
@@ -25,6 +25,9 @@ Output: {"item":"Nasi Goreng Spesial","harga":25000,"lokasi":"depan komplek","ka
 
 Input: "Gaji bulan ini masuk 5jt"
 Output: {"item":"Gaji Bulan Ini","harga":5000000,"lokasi":null,"kategori":"gaji","tipe":"pemasukan"}
+
+Input: "Bonus investasi 2 miliyar"
+Output: {"item":"Bonus Investasi","harga":2000000000,"lokasi":null,"kategori":"investasi","tipe":"pemasukan"}
 
 Input: "Nabung dana darurat 500rb"
 Output: {"item":"Nabung Dana Darurat","harga":500000,"lokasi":null,"kategori":"tabungan","tipe":"tabungan","wallet_name":"Dana Darurat"}

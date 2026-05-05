@@ -1,5 +1,7 @@
+import { memo } from 'react';
 import { Calendar, History, MapPin, MessageCircle, ReceiptText, Tag } from 'lucide-react';
 import { ButtonLink } from '../ui/Primitives';
+import { Skeleton } from '../ui/Skeleton';
 
 function formatCurrency(value) {
     return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
@@ -21,9 +23,10 @@ function formatDate(dateStr) {
 
 function TransactionAmount({ transaction }) {
     const isIncome = transaction.tipe === 'pemasukan';
+    const isSaving = transaction.tipe === 'tabungan';
 
     return (
-        <span className={`font-medium ${isIncome ? 'text-[#176d64]' : 'text-black'}`}>
+        <span className={`font-medium ${isIncome || isSaving ? 'text-[#176d64]' : 'text-black'}`}>
             {isIncome ? '+' : ''}
             {formatCurrency(transaction.harga)}
         </span>
@@ -32,11 +35,15 @@ function TransactionAmount({ transaction }) {
 
 function EmptyState() {
     return (
-        <div className="rounded-[24px] bg-[#f8f8f8] p-6 text-center">
-            <MessageCircle className="mx-auto mb-4 h-6 w-6 text-black" />
-            <p className="text-sm font-medium text-black">Belum ada transaksi.</p>
-            <p className="hu-body mx-auto mt-2 max-w-sm text-sm">Catat transaksi pertama lewat WhatsApp, lalu perbarui dashboard.</p>
-            <ButtonLink href="https://wa.me/628123456789" variant="secondary" className="mt-4" external>
+        <div className="rounded-[24px] bg-gradient-to-br from-[#f8f8f8] to-white p-8 text-center animate-fade-in">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#75ddd1]/20">
+                <MessageCircle className="h-8 w-8 text-[#176d64]" aria-hidden="true" />
+            </div>
+            <h3 className="text-lg font-medium text-black">Belum ada transaksi.</h3>
+            <p className="hu-body mx-auto mt-2 max-w-sm text-sm">
+                Catat transaksi pertama lewat WhatsApp, lalu perbarui dashboard untuk melihat data Anda.
+            </p>
+            <ButtonLink href="https://wa.me/628123456789" variant="secondary" className="mt-6" external>
                 Buka WhatsApp
             </ButtonLink>
         </div>
@@ -68,7 +75,7 @@ function TransactionMobileList({ transactions }) {
     );
 }
 
-export function TransactionTable({ transactions, loading }) {
+export const TransactionTable = memo(function TransactionTable({ transactions, loading }) {
     return (
         <section className="p-card overflow-hidden">
             <header className="mb-6 flex items-center justify-between gap-3 px-1">
@@ -86,7 +93,16 @@ export function TransactionTable({ transactions, loading }) {
             {loading ? (
                 <div className="grid gap-3">
                     {[1, 2, 3, 4].map((item) => (
-                        <div key={item} className="h-16 w-full animate-pulse rounded-[22px] bg-[#efefef]" />
+                        <div key={item} className="rounded-[22px] bg-[#f8f8f8] p-4">
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                                <div className="flex-1">
+                                    <Skeleton variant="text" className="w-32 mb-2" />
+                                    <Skeleton variant="text" className="w-24" />
+                                </div>
+                                <Skeleton variant="text" className="w-20" />
+                            </div>
+                            <Skeleton variant="default" className="h-6 w-full" />
+                        </div>
                     ))}
                 </div>
             ) : transactions.length === 0 ? (
@@ -138,7 +154,7 @@ export function TransactionTable({ transactions, loading }) {
                                             </div>
                                         </td>
                                         <td>
-                                            <span className={`p-badge ${transaction.tipe === 'pemasukan' ? 'p-badge-success' : 'p-badge-warning'} capitalize`}>
+                                            <span className={`p-badge ${transaction.tipe === 'pemasukan' || transaction.tipe === 'tabungan' ? 'p-badge-success' : 'p-badge-warning'} capitalize`}>
                                                 {transaction.kategori}
                                             </span>
                                         </td>
@@ -154,4 +170,4 @@ export function TransactionTable({ transactions, loading }) {
             )}
         </section>
     );
-}
+});

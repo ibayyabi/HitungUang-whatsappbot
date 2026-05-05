@@ -9,8 +9,12 @@ export function cn(...classes) {
 
 export function PageShell({ children, className = '' }) {
     return (
-        <main className={cn('hu-page landing-theme', className)}>
-            {children}
+        <main className={cn('hu-page landing-theme relative', className)}>
+            <div className="fixed top-0 inset-x-0 h-[3px] bg-[var(--gradient-hitunguang-glow)] z-50 opacity-90" />
+            <div className="absolute inset-0 z-0 h-[90vh] w-full bg-[var(--gradient-hitunguang-glow)] opacity-[0.08] [mask-image:linear-gradient(to_bottom,black_0%,transparent_100%)] pointer-events-none" />
+            <div className="relative z-10">
+                {children}
+            </div>
         </main>
     );
 }

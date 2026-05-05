@@ -2,6 +2,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const dotenv = require('dotenv');
 const { EXPENSE_PARSER_PROMPT } = require('../config/prompts');
 const { sanitizeInput } = require('../utils/sanitizer');
+const { normalizeCurrencyText, parseCurrencyAmount } = require('../utils/currencyNormalizer');
 const logger = require('../utils/logger');
 const {
     DEFAULT_TRANSACTION_CATEGORY,
@@ -60,7 +61,7 @@ function normalizeParsedExpense(parsed) {
         const normalizedItem = {
             item: typeof item.item === 'string' ? item.item.trim() : '',
             harga: typeof item.harga === 'string' 
-                ? Number(item.harga.replace(/[.,]/g, '')) 
+                ? parseCurrencyAmount(item.harga)
                 : Number(item.harga),
             kategori: typeof item.kategori === 'string' && item.kategori.trim() ? item.kategori.trim().toLowerCase() : DEFAULT_TRANSACTION_CATEGORY,
             lokasi: typeof item.lokasi === 'string' && item.lokasi.trim() ? item.lokasi.trim() : null,
@@ -106,7 +107,7 @@ class AIParser {
         }
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         // Menggunakan Gemini Flash untuk kecepatan dan efisiensi
-        this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     }
 
     /**
@@ -115,7 +116,8 @@ class AIParser {
     async parseExpense(text) {
         try {
             const cleanText = sanitizeInput(text);
-            const prompt = `${EXPENSE_PARSER_PROMPT}\n\nInput: "${cleanText}"\nOutput:`;
+            const normalizedText = normalizeCurrencyText(cleanText);
+            const prompt = `${EXPENSE_PARSER_PROMPT}\n\nInput: "${normalizedText}"\nOutput:`;
             const result = await this.model.generateContent(prompt);
             return this._processResult(result);
         } catch (error) {

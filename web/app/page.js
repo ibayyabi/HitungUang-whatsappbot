@@ -126,7 +126,7 @@ function DashboardPreview() {
 function ProductPreview() {
     return (
         <div className="hu-product-preview">
-            <div className="hu-glow absolute inset-x-8 top-16 h-56 rounded-[40px]" />
+            <div className="hu-glow absolute inset-x-4 top-10 h-72 rounded-[40px]" />
             <Surface className="relative overflow-hidden p-4 md:p-5">
                 <div className="hu-preview-grid">
                     <ChatPreview />
@@ -147,17 +147,20 @@ export default function LandingPage() {
         <PageShell>
             <AppHeader navItems={navItems} />
 
-            <section className="hu-shell hu-hero">
-                <div className="flex flex-col items-center">
-                    <p className="hu-kicker text-lg">Asisten keuangan WhatsApp</p>
-                    <h1 className="hu-display mt-5 max-w-4xl">CuanBeres</h1>
+            <section className="hu-shell hu-hero relative z-10">
+                <div className="flex flex-col items-center reveal-sequence-smooth">
+                    <div className="mb-6 inline-flex items-center rounded-full bg-black/[0.04] px-4 py-1.5 text-sm font-medium text-black ring-1 ring-black/[0.04] animate-bounce-in">
+                        <MessageCircle className="mr-2 h-4 w-4 text-[#176d64]" aria-hidden="true" />
+                        Asisten keuangan WhatsApp
+                    </div>
+                    <h1 className="hu-display mt-2 max-w-4xl text-gradient-animate">CuanBeres</h1>
                     <p className="hu-body mt-6 max-w-xl text-lg">
                         Catat transaksi lewat chat, biarkan CuanBeres merapikan kategori, lalu baca ringkasan uang harian dari dashboard web.
                     </p>
                     <div className="hu-actions mt-9 justify-center">
                         <ButtonLink href="/onboarding">
                             Mulai daftar
-                            <ArrowRight className="h-4 w-4" />
+                            <ArrowRight className="h-4 w-4" aria-hidden="true" />
                         </ButtonLink>
                         <ButtonLink href="/login" variant="secondary">
                             Masuk dashboard
@@ -166,7 +169,7 @@ export default function LandingPage() {
                     <div className="mt-10 flex flex-wrap justify-center gap-6">
                         {['Mulai dari web', 'Mulai dari chat bot', 'Link masuk aman'].map((item) => (
                             <div key={item} className="flex items-center gap-2 text-sm font-medium text-black">
-                                <CheckCircle2 className="h-4 w-4 text-[#176d64]" />
+                                <CheckCircle2 className="h-4 w-4 text-[#176d64]" aria-hidden="true" />
                                 {item}
                             </div>
                         ))}
@@ -178,7 +181,8 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            <section id="fitur" className="hu-shell hu-section">
+            <section id="fitur" className="hu-shell hu-section relative z-10">
+                <div className="absolute inset-0 -z-10 h-[100%] w-full bg-[var(--gradient-hitunguang-glow)] opacity-[0.05] [mask-image:linear-gradient(to_bottom,transparent_0%,black_50%,transparent_100%)] pointer-events-none" />
                 <SectionIntro
                     eyebrow="Fitur utama"
                     title="Pencatatan cepat, dashboard tetap rapi."
@@ -198,7 +202,8 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            <section id="alur" className="hu-shell hu-section">
+            <section id="alur" className="hu-shell hu-section relative z-10">
+                <div className="absolute inset-0 -z-10 h-[100%] w-full bg-[var(--gradient-hitunguang-glow)] opacity-[0.05] [mask-image:linear-gradient(to_bottom,transparent_0%,black_50%,transparent_100%)] pointer-events-none" />
                 <Surface className="hu-flow-surface">
                     <SectionIntro
                         eyebrow="Alur mulai"
@@ -221,7 +226,8 @@ export default function LandingPage() {
                 </Surface>
             </section>
 
-            <section id="aman" className="hu-shell hu-section">
+            <section id="aman" className="hu-shell hu-section relative z-10">
+                <div className="absolute inset-0 -z-10 h-[100%] w-full bg-[var(--gradient-hitunguang-glow)] opacity-[0.08] [mask-image:linear-gradient(to_bottom,transparent_0%,black_50%,transparent_100%)] pointer-events-none" />
                 <div className="hu-centered-section">
                     <ShieldCheck className="mx-auto h-7 w-7 text-black" />
                     <h2 className="hu-heading mt-6">Data uang tetap milik akun Anda.</h2>

@@ -26,6 +26,8 @@ import {
     PageShell,
     Surface
 } from '../../components/ui/Primitives';
+import { validatePhone, validateRequired, sanitizeText } from '../../lib/validation';
+import { apiClient, ApiError } from '../../lib/api-client';
 
 function normalizePhone(value) {
     return String(value || '').replace(/\D/g, '');
@@ -46,6 +48,7 @@ function RegisterContent() {
         isError: false,
         success: false
     });
+    const [errors, setErrors] = useState({});
 
     useEffect(() => {
         const userId = searchParams.get('whatsapp') || searchParams.get('telegram_user_id');
@@ -65,15 +68,21 @@ function RegisterContent() {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
+        setErrors({});
+        
         const normalizedWhatsapp = normalizePhone(whatsappNumber);
 
-        if (!normalizedWhatsapp.startsWith('62') || normalizedWhatsapp.length < 10) {
-            setStatus({
-                loading: false,
-                message: 'Gunakan format nomor WhatsApp 628...',
-                isError: true,
-                success: false
-            });
+        // Validate phone
+        const phoneValidation = validatePhone(normalizedWhatsapp);
+        if (!phoneValidation.valid) {
+            setErrors({ whatsapp: phoneValidation.error });
+            return;
+        }
+
+        // Validate name
+        const nameValidation = validateRequired(name, 'Nama tampilan');
+        if (!nameValidation.valid) {
+            setErrors({ name: nameValidation.error });
             return;
         }
 
@@ -81,24 +90,19 @@ function RegisterContent() {
         setWhatsappNumber(normalizedWhatsapp);
 
         try {
-            const response = await fetch('/api/auth/register', {
+            const data = await apiClient('/api/auth/register', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     telegram_user_id: normalizedWhatsapp,
                     telegram_chat_id: telegramChatId,
                     telegram_username: telegramUsername,
-                    display_name: name.trim(),
+                    display_name: sanitizeText(name),
                     status_pekerjaan: statusPekerjaan,
                     target_pengeluaran_bulanan: targetPengeluaran ? parseInt(targetPengeluaran, 10) : null,
                     target_pemasukan_bulanan: targetPemasukan ? parseInt(targetPemasukan, 10) : null
-                })
+                }),
+                retry: 1
             });
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Gagal registrasi.');
-            }
 
             setStatus({
                 loading: false,
@@ -107,9 +111,12 @@ function RegisterContent() {
                 success: true
             });
         } catch (error) {
+            const message = error instanceof ApiError
+                ? error.message
+                : 'Gagal registrasi. Silakan coba lagi.';
             setStatus({
                 loading: false,
-                message: error instanceof Error ? error.message : 'Gagal registrasi.',
+                message,
                 isError: true,
                 success: false
             });
@@ -119,7 +126,7 @@ function RegisterContent() {
     if (status.success) {
         return (
             <section className="hu-shell grid min-h-[calc(100vh-92px)] items-center gap-10 py-14 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                <div className="min-w-0">
+                <div className="min-w-0 reveal-sequence">
                     <ButtonLink href="/" variant="ghost" className="mb-8 px-0">
                         <ArrowLeft className="h-4 w-4" />
                         Beranda
@@ -147,7 +154,7 @@ function RegisterContent() {
                     </div>
                 </div>
 
-                <Surface className="overflow-hidden">
+                <Surface className="overflow-hidden animate-fade-in delay-200">
                     <div className="grid gap-6 p-5 md:grid-cols-[1fr_220px] md:items-center md:p-6">
                         <div>
                             <p className="hu-kicker">Langkah berikutnya</p>
@@ -171,7 +178,7 @@ function RegisterContent() {
 
     return (
         <section className="hu-shell grid min-h-[calc(100vh-92px)] items-center gap-12 py-14 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <div className="min-w-0">
+            <div className="min-w-0 reveal-sequence">
                 <ButtonLink href="/onboarding" variant="ghost" className="mb-8 px-0">
                     <ArrowLeft className="h-4 w-4" />
                     Onboarding
@@ -187,7 +194,7 @@ function RegisterContent() {
                 </p>
             </div>
 
-            <Surface className="p-6 md:p-8">
+            <Surface className="p-6 md:p-8 animate-fade-in delay-200">
                 <form className="space-y-5" onSubmit={handleSubmit}>
                     <Field
                         id="whatsapp-number"
@@ -202,11 +209,20 @@ function RegisterContent() {
                             autoComplete="tel"
                             placeholder="628123456789"
                             value={whatsappNumber}
-                            onChange={(event) => setWhatsappNumber(normalizePhone(event.target.value))}
+                            onChange={(event) => {
+                                setWhatsappNumber(normalizePhone(event.target.value));
+                                setErrors(prev => ({ ...prev, whatsapp: null }));
+                            }}
                             readOnly={lockedWhatsappNumber}
                             className="hu-input"
-                            aria-invalid={status.isError}
+                            aria-invalid={!!errors.whatsapp}
+                            aria-describedby={errors.whatsapp ? 'whatsapp-error' : undefined}
                         />
+                        {errors.whatsapp && (
+                            <p id="whatsapp-error" className="mt-2 text-sm text-red-600" role="alert">
+                                {errors.whatsapp}
+                            </p>
+                        )}
                     </Field>
 
                     <Field
@@ -219,11 +235,21 @@ function RegisterContent() {
                             type="text"
                             placeholder="Nama panggilan"
                             value={name}
-                            onChange={(event) => setName(event.target.value)}
+                            onChange={(event) => {
+                                setName(event.target.value);
+                                setErrors(prev => ({ ...prev, name: null }));
+                            }}
                             required
                             autoFocus
                             className="hu-input"
+                            aria-invalid={!!errors.name}
+                            aria-describedby={errors.name ? 'name-error' : undefined}
                         />
+                        {errors.name && (
+                            <p id="name-error" className="mt-2 text-sm text-red-600" role="alert">
+                                {errors.name}
+                            </p>
+                        )}
                     </Field>
 
                     <Field

@@ -4,6 +4,10 @@ const PROFILE_FIELDS = [
     'telegram_chat_id',
     'telegram_username',
     'display_name',
+    'status_pekerjaan',
+    'target_pengeluaran_bulanan',
+    'target_pemasukan_bulanan',
+    'last_alert_month',
     'created_at'
 ];
 

@@ -4,6 +4,7 @@ const dbService = require('../services/dbService');
 const nl2sqlService = require('../services/nl2sqlService');
 const logger = require('../utils/logger');
 const { classifyMessage } = require('../utils/messageClassifier');
+const { maybeSendSpendingAlert } = require('../services/spendingAlertService');
 
 const DASHBOARD_ACCESS_COMMANDS = new Set([
     '/dashboard',
@@ -91,6 +92,26 @@ function normalizeMessage(input) {
     };
 }
 
+function buildWalletChoiceReply(wallets) {
+    const choices = wallets
+        .slice(0, 3)
+        .map((wallet, index) => `${index + 1}. ${wallet.nama_dompet}`)
+        .join('\n');
+    const exampleWallet = wallets[0] ? wallets[0].nama_dompet : 'Dana Darurat';
+
+    return [
+        '⚠️ Anda punya beberapa dompet tabungan. Sebutkan dompet tujuan agar saya tidak salah catat.',
+        '',
+        choices,
+        '',
+        `Contoh: "Nabung ${exampleWallet} 100rb".`
+    ].join('\n');
+}
+
+function formatCurrency(value) {
+    return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
+}
+
 async function handleMessage(input) {
     const message = normalizeMessage(input);
     const originalText = message.text;
@@ -108,6 +129,7 @@ async function handleMessage(input) {
     try {
         logger.info(`Memeriksa registrasi untuk WhatsApp user: ${sender}`);
         const user = await dbService.getUserByTelegramId(sender);
+        logger.info(`User profile fetched: ${user?.display_name}, Target: ${user?.target_pengeluaran_bulanan}, LastAlert: ${user?.last_alert_month}`);
 
         if (!user) {
             logger.warn(`WhatsApp user ${sender} mencoba akses tapi belum terdaftar.`);
@@ -141,6 +163,7 @@ async function handleMessage(input) {
         const text = messageType.normalizedText;
 
         if (!messageType.shouldProcess) {
+            logger.info(`Pesan dari ${sender} diabaikan (bukan transaksi/pertanyaan): "${originalText}" (Mode: ${messageType.mode})`);
             return;
         }
 
@@ -198,21 +221,59 @@ async function handleMessage(input) {
             let totalPengeluaran = 0;
             let totalPemasukan = 0;
             let totalTabungan = 0;
+            let projectedAvailableAfterSaving = null;
+
+            let activeWallets = null;
 
             // Resolve wallet_id untuk tipe tabungan
             for (const item of items) {
                 if (item.tipe === 'tabungan') {
+                    if (!activeWallets) {
+                        activeWallets = await dbService.listActiveWallets(user.id);
+                    }
+
                     if (item.wallet_name) {
-                        const wallet = await dbService.findWalletByName(user.id, item.wallet_name);
+                        const wallet = await dbService.findWalletByNameExact(user.id, item.wallet_name) ||
+                            await dbService.findWalletByName(user.id, item.wallet_name);
                         if (wallet) {
                             item.wallet_id = wallet.id;
                             item.nama_dompet_asli = wallet.nama_dompet;
                         } else {
                             return await message.reply(`⚠️ Dompet tabungan "${item.wallet_name}" tidak ditemukan. Silakan buat dompet tersebut di Dashboard terlebih dahulu.`);
                         }
+                    } else if (activeWallets.length === 1) {
+                        item.wallet_id = activeWallets[0].id;
+                        item.nama_dompet_asli = activeWallets[0].nama_dompet;
+                    } else if (activeWallets.length > 1) {
+                        return await message.reply(buildWalletChoiceReply(activeWallets));
                     } else {
-                        return await message.reply(`⚠️ Nama dompet tidak dikenali. Sebutkan nama dompet tujuan (contoh: "Nabung dana darurat 100rb").`);
+                        return await message.reply('⚠️ Anda belum punya dompet tabungan. Silakan buat dompet di Dashboard terlebih dahulu.');
                     }
+                }
+            }
+
+            const parsedIncomeTotal = items
+                .filter((item) => item.tipe === 'pemasukan')
+                .reduce((sum, item) => sum + Number(item.harga || 0), 0);
+            const parsedExpenseTotal = items
+                .filter((item) => item.tipe === 'pengeluaran')
+                .reduce((sum, item) => sum + Number(item.harga || 0), 0);
+            const parsedSavingsTotal = items
+                .filter((item) => item.tipe === 'tabungan')
+                .reduce((sum, item) => sum + Number(item.harga || 0), 0);
+
+            if (parsedSavingsTotal > 0) {
+                const allocation = await dbService.getMonthlyAllocationSummary(user.id);
+                const projectedAvailableBeforeSaving = Number(allocation.availableMoney || 0) + parsedIncomeTotal - parsedExpenseTotal;
+                projectedAvailableAfterSaving = projectedAvailableBeforeSaving - parsedSavingsTotal;
+
+                if (projectedAvailableAfterSaving < 0) {
+                    return await message.reply([
+                        `⚠️ Available money bulan ini belum cukup untuk tabungan ${formatCurrency(parsedSavingsTotal)}.`,
+                        `Available money saat ini: ${formatCurrency(allocation.availableMoney)}.`,
+                        '',
+                        'Catat pemasukan dulu, kurangi nominal tabungan, atau isi saldo awal dari Dashboard jika ini dana lama.'
+                    ].join('\n'));
                 }
             }
 
@@ -242,9 +303,6 @@ async function handleMessage(input) {
                     tipeLabel = 'Tabungan';
                     displayName = `${item.item} (${item.nama_dompet_asli})`;
                     totalTabungan += item.harga;
-                    
-                    // Update balance dompet
-                    await dbService.updateWalletBalance(item.wallet_id, item.harga);
                 } else {
                     totalPengeluaran += item.harga;
                 }
@@ -262,19 +320,33 @@ async function handleMessage(input) {
                 confirmationText += `\n\n⚠️ ${insertResult.skippedCount} item duplikat tidak dicatat ulang.`;
             }
 
+            if (projectedAvailableAfterSaving !== null) {
+                confirmationText += `\n\nAvailable money tersisa: ${formatCurrency(projectedAvailableAfterSaving)}`;
+            }
+
+            const insertedTransactions = Array.isArray(insertResult?.insertedTransactions)
+                ? insertResult.insertedTransactions
+                : items;
+            let walletUpdateFailed = 0;
+
+            for (const row of insertedTransactions) {
+                if (row.tipe === 'tabungan' && row.wallet_id) {
+                    const updatedWallet = await dbService.incrementWalletBalance(row.wallet_id, user.id, row.harga);
+                    if (!updatedWallet) {
+                        walletUpdateFailed += 1;
+                    }
+                }
+            }
+
+            if (walletUpdateFailed > 0) {
+                confirmationText += `\n\n⚠️ ${walletUpdateFailed} saldo dompet belum berhasil diperbarui. Transaksi sudah tercatat, silakan cek Dashboard.`;
+            }
+
             await message.reply(confirmationText);
             logger.info(`Berhasil mencatat ${items.length} item ke Supabase untuk WhatsApp user ${sender}`);
 
-            // Cek Threshold Alert 80%
-            if (totalPengeluaran > 0 && user.target_pengeluaran_bulanan > 0) {
-                const currentExpenses = await dbService.getTotalExpensesThisMonth(user.id);
-                const percentage = currentExpenses / user.target_pengeluaran_bulanan;
-                const currentMonth = new Date().toISOString().substring(0, 7); // Format: YYYY-MM
-                
-                if (percentage >= 0.8 && user.last_alert_month !== currentMonth) {
-                    await message.reply(`⚠️ *Warning!* Pengeluaran Anda bulan ini (Rp ${currentExpenses.toLocaleString('id-ID')}) sudah mencapai ${(percentage * 100).toFixed(0)}% dari target bulanan Anda. Yuk rem sedikit belanjanya!`);
-                    await dbService.updateLastAlertMonth(user.id, currentMonth);
-                }
+            if (totalPengeluaran > 0) {
+                await maybeSendSpendingAlert({ message, user });
             }
         }
 

@@ -5,8 +5,10 @@ import {
     ArrowDownRight,
     ArrowUpRight,
     CalendarDays,
+    Loader2,
     MessageCircle,
     RefreshCw,
+    Target,
     Wallet
 } from 'lucide-react';
 import { BalanceMysteryCard } from '../../components/dashboard/BalanceMysteryCard';
@@ -15,6 +17,7 @@ import { ExpenseCharts } from '../../components/dashboard/ExpenseCharts';
 import { TransactionTable } from '../../components/dashboard/TransactionTable';
 import { WalletSection } from '../../components/dashboard/WalletSection';
 import { Button, ButtonLink, Surface } from '../../components/ui/Primitives';
+import { apiClient, ApiError } from '../../lib/api-client';
 
 const INITIAL_STATE = {
     balance: {
@@ -22,7 +25,13 @@ const INITIAL_STATE = {
         todayExpense: 0,
         todayRemaining: 0,
         weekIncome: 0,
-        weekExpense: 0
+        weekExpense: 0,
+        todaySavings: 0,
+        weekSavings: 0,
+        monthIncome: 0,
+        monthExpense: 0,
+        monthSavings: 0,
+        availableMoney: 0
     },
     dailySeries: [],
     weeklySeries: [],
@@ -42,22 +51,113 @@ function MetricCard({ label, value, icon: Icon, tone = 'neutral', loading }) {
     const toneClass = {
         neutral: 'bg-[#efefef] text-black',
         income: 'bg-[#75ddd1]/25 text-[#176d64]',
-        expense: 'bg-[#fae5ba]/70 text-[#6e5523]'
+        expense: 'bg-[#fae5ba]/70 text-[#6e5523]',
+        savings: 'bg-[#edb09c]/25 text-[#7a3d2c]'
     }[tone];
 
     return (
         <Surface className="min-h-[156px] p-5 md:p-6">
             <div className="flex items-center justify-between gap-3">
                 <p className="p-card-title">{label}</p>
-                <span className={`flex h-9 w-9 items-center justify-center rounded-full ${toneClass}`}>
+                <span className={`flex h-9 w-9 items-center justify-center rounded-full ${toneClass}`} aria-hidden="true">
                     <Icon className="h-4 w-4" />
                 </span>
             </div>
             {loading ? (
-                <div className="mt-6 h-9 w-40 animate-pulse rounded-full bg-[#efefef]" />
+                <div className="mt-6 h-9 w-40 animate-pulse rounded-full bg-[#efefef]" role="status" aria-label="Memuat data" />
             ) : (
                 <p className="mt-6 text-3xl font-light leading-none text-black">{formatCurrency(value)}</p>
             )}
+        </Surface>
+    );
+}
+
+function ProfileTargetCard({ profile, loading, onSaved }) {
+    const [targetExpense, setTargetExpense] = useState('');
+    const [targetIncome, setTargetIncome] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        setTargetExpense(profile?.target_pengeluaran_bulanan ? String(profile.target_pengeluaran_bulanan) : '');
+        setTargetIncome(profile?.target_pemasukan_bulanan ? String(profile.target_pemasukan_bulanan) : '');
+    }, [profile]);
+
+    async function handleSubmit(event) {
+        event.preventDefault();
+        setSaving(true);
+        setMessage('');
+
+        try {
+            const payload = await apiClient('/api/dashboard/profile', {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    target_pengeluaran_bulanan: targetExpense ? Number(targetExpense) : null,
+                    target_pemasukan_bulanan: targetIncome ? Number(targetIncome) : null
+                }),
+                retry: 1
+            });
+
+            setMessage('Target tersimpan.');
+            onSaved();
+        } catch (error) {
+            const message = error instanceof ApiError
+                ? error.message
+                : 'Gagal menyimpan target.';
+            setMessage(message);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    if (loading) {
+        return (
+            <Surface className="p-5 md:p-6 animate-pulse">
+                <div className="h-6 w-36 rounded bg-[#efefef]" />
+                <div className="mt-5 h-24 rounded-[20px] bg-[#efefef]" />
+            </Surface>
+        );
+    }
+
+    return (
+        <Surface className="p-5 md:p-6">
+            <div className="mb-5 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#fae5ba]/70 text-[#6e5523]">
+                    <Target className="h-5 w-5" />
+                </div>
+                <div>
+                    <h2 className="p-card-title mb-0">Target bulanan</h2>
+                    <p className="hu-meta">Dasar alert 80% dan rekomendasi dompet</p>
+                </div>
+            </div>
+            <form className="space-y-3" onSubmit={handleSubmit}>
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-black">Pengeluaran Rp</label>
+                    <input
+                        type="number"
+                        min="0"
+                        className="hu-input bg-white"
+                        value={targetExpense}
+                        onChange={(event) => setTargetExpense(event.target.value)}
+                        placeholder="5000000"
+                    />
+                </div>
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-black">Pemasukan Rp</label>
+                    <input
+                        type="number"
+                        min="0"
+                        className="hu-input bg-white"
+                        value={targetIncome}
+                        onChange={(event) => setTargetIncome(event.target.value)}
+                        placeholder="10000000"
+                    />
+                </div>
+                {message ? <p className={`rounded-[16px] p-3 text-sm ${message.includes('Gagal') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{message}</p> : null}
+                <Button type="submit" disabled={saving} className="w-full">
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Simpan target'}
+                </Button>
+            </form>
         </Surface>
     );
 }
@@ -73,14 +173,10 @@ export default function DashboardClient({ user }) {
         setStatus({ loading: true, message: '' });
 
         try {
-            const response = await fetch('/api/dashboard/summary', {
-                cache: 'no-store'
+            const payload = await apiClient('/api/dashboard/summary', { 
+                cache: 'no-store',
+                retry: 2 
             });
-            const payload = await response.json();
-
-            if (!response.ok) {
-                throw new Error(payload.message || 'Gagal memuat dashboard.');
-            }
 
             setSummary({
                 balance: payload.balance || INITIAL_STATE.balance,
@@ -93,9 +189,12 @@ export default function DashboardClient({ user }) {
             });
             setStatus({ loading: false, message: '' });
         } catch (error) {
+            const message = error instanceof ApiError
+                ? error.message
+                : 'Koneksi bermasalah. Silakan coba lagi.';
             setStatus({
                 loading: false,
-                message: error instanceof Error ? error.message : 'Gagal memuat dashboard.'
+                message
             });
         }
     }
@@ -125,8 +224,9 @@ export default function DashboardClient({ user }) {
                     onClick={loadSummary}
                     disabled={status.loading}
                     variant="secondary"
+                    aria-label="Perbarui data dashboard"
                 >
-                    <RefreshCw className={`h-4 w-4 ${status.loading ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`h-4 w-4 ${status.loading ? 'animate-spin' : ''}`} aria-hidden="true" />
                     <span>Perbarui data</span>
                 </Button>
             </header>
@@ -142,7 +242,7 @@ export default function DashboardClient({ user }) {
                 </div>
             ) : null}
 
-            <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_1fr_1fr_1fr]">
+            <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <BalanceMysteryCard balance={summary.balance} loading={status.loading} />
                 <MetricCard
                     label="Pemasukan hari ini"
@@ -159,6 +259,20 @@ export default function DashboardClient({ user }) {
                     loading={status.loading}
                 />
                 <MetricCard
+                    label="Available money bulan ini"
+                    value={summary.balance.availableMoney}
+                    icon={Wallet}
+                    tone="income"
+                    loading={status.loading}
+                />
+                <MetricCard
+                    label="Uang tabungan bulan ini"
+                    value={summary.balance.monthSavings}
+                    icon={Wallet}
+                    tone="savings"
+                    loading={status.loading}
+                />
+                <MetricCard
                     label="Pengeluaran minggu ini"
                     value={summary.balance.weekExpense}
                     icon={CalendarDays}
@@ -168,8 +282,15 @@ export default function DashboardClient({ user }) {
 
             <div className="dashboard-grid">
                 <aside className="flex flex-col gap-4">
+                    <ProfileTargetCard profile={summary.profile} loading={status.loading} onSaved={loadSummary} />
                     <CategorySummary categories={summary.categories} loading={status.loading} />
-                    <WalletSection profile={summary.profile} wallets={summary.wallets} loading={status.loading} onWalletCreated={loadSummary} />
+                    <WalletSection
+                        profile={summary.profile}
+                        wallets={summary.wallets}
+                        availableMoney={summary.balance.availableMoney}
+                        loading={status.loading}
+                        onWalletCreated={loadSummary}
+                    />
                     <Surface className="p-5 md:p-6">
                         <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#efefef] text-black">
                             <Wallet className="h-5 w-5" />

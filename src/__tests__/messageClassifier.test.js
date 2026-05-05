@@ -32,4 +32,14 @@ describe('messageClassifier', () => {
         expect(result.mode).toBe('ignore');
         expect(result.shouldProcess).toBe(false);
     });
+
+    test('mengenali miliyar sebagai nominal transaksi', () => {
+        const result = classifyMessage({
+            text: 'Gaji 2 miliyar',
+            hasMedia: false
+        });
+
+        expect(result.mode).toBe('transaction');
+        expect(result.isTransactionText).toBe(true);
+    });
 });

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '../../lib/supabase/server';
 import DashboardClient from './DashboardClient';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 
 export const metadata = {
     title: 'Dashboard | CuanBeres',
@@ -17,5 +18,9 @@ export default async function DashboardPage() {
         redirect('/login');
     }
 
-    return <DashboardClient user={data.user} />;
+    return (
+        <ErrorBoundary>
+            <DashboardClient user={data.user} />
+        </ErrorBoundary>
+    );
 }

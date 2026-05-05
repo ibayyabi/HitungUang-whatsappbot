@@ -12,6 +12,10 @@ function startOfWeek(date) {
     return start;
 }
 
+function startOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
 function addDays(date, days) {
     const next = new Date(date);
     next.setDate(next.getDate() + days);
@@ -42,7 +46,8 @@ function formatWeekLabel(date) {
 function emptyTotals() {
     return {
         pengeluaran: 0,
-        pemasukan: 0
+        pemasukan: 0,
+        tabungan: 0
     };
 }
 
@@ -52,7 +57,15 @@ function toAmount(row) {
 }
 
 function normalizeType(row) {
-    return row && row.tipe === 'pemasukan' ? 'pemasukan' : 'pengeluaran';
+    if (row && row.tipe === 'pemasukan') {
+        return 'pemasukan';
+    }
+
+    if (row && row.tipe === 'tabungan') {
+        return 'tabungan';
+    }
+
+    return 'pengeluaran';
 }
 
 function aggregateDashboardSummary(rows, options = {}) {
@@ -62,6 +75,8 @@ function aggregateDashboardSummary(rows, options = {}) {
     const tomorrowStart = addDays(todayStart, 1);
     const weekStart = startOfWeek(now);
     const nextWeekStart = addDays(weekStart, 7);
+    const monthStart = startOfMonth(now);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const dailyStart = addDays(todayStart, -6);
     const weeklyStart = addDays(weekStart, -21);
 
@@ -71,7 +86,8 @@ function aggregateDashboardSummary(rows, options = {}) {
         dailyMap.set(formatDayKey(day), {
             date: formatDayLabel(day),
             pengeluaran: 0,
-            pemasukan: 0
+            pemasukan: 0,
+            tabungan: 0
         });
     }
 
@@ -81,7 +97,8 @@ function aggregateDashboardSummary(rows, options = {}) {
         weeklyMap.set(formatDayKey(week), {
             week: formatWeekLabel(week),
             pengeluaran: 0,
-            pemasukan: 0
+            pemasukan: 0,
+            tabungan: 0
         });
     }
 
@@ -91,7 +108,13 @@ function aggregateDashboardSummary(rows, options = {}) {
         todayExpense: 0,
         todayRemaining: 0,
         weekIncome: 0,
-        weekExpense: 0
+        weekExpense: 0,
+        todaySavings: 0,
+        weekSavings: 0,
+        monthIncome: 0,
+        monthExpense: 0,
+        monthSavings: 0,
+        availableMoney: 0
     };
 
     for (const row of transactions) {
@@ -103,10 +126,13 @@ function aggregateDashboardSummary(rows, options = {}) {
         const amount = toAmount(row);
         const type = normalizeType(row);
         const isIncome = type === 'pemasukan';
+        const isSaving = type === 'tabungan';
 
         if (date >= todayStart && date < tomorrowStart) {
             if (isIncome) {
                 balance.todayIncome += amount;
+            } else if (isSaving) {
+                balance.todaySavings += amount;
             } else {
                 balance.todayExpense += amount;
             }
@@ -115,8 +141,20 @@ function aggregateDashboardSummary(rows, options = {}) {
         if (date >= weekStart && date < nextWeekStart) {
             if (isIncome) {
                 balance.weekIncome += amount;
+            } else if (isSaving) {
+                balance.weekSavings += amount;
             } else {
                 balance.weekExpense += amount;
+            }
+        }
+
+        if (date >= monthStart && date < nextMonthStart) {
+            if (isIncome) {
+                balance.monthIncome += amount;
+            } else if (isSaving) {
+                balance.monthSavings += amount;
+            } else {
+                balance.monthExpense += amount;
             }
         }
 
@@ -130,7 +168,7 @@ function aggregateDashboardSummary(rows, options = {}) {
             weekBucket[type] += amount;
         }
 
-        if (!isIncome) {
+        if (!isIncome && !isSaving) {
             const category = row.kategori || 'lainnya';
             const existing = categoryMap.get(category) || {
                 kategori: category,
@@ -144,6 +182,7 @@ function aggregateDashboardSummary(rows, options = {}) {
     }
 
     balance.todayRemaining = balance.todayIncome - balance.todayExpense;
+    balance.availableMoney = balance.monthIncome - balance.monthExpense - balance.monthSavings;
 
     return {
         balance,
@@ -157,6 +196,7 @@ function aggregateDashboardSummary(rows, options = {}) {
 module.exports = {
     aggregateDashboardSummary,
     startOfDay,
+    startOfMonth,
     startOfWeek,
     emptyTotals
 };

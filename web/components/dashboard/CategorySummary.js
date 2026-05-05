@@ -1,5 +1,7 @@
+import { memo } from 'react';
 import { PieChart } from 'lucide-react';
 import { ButtonLink } from '../ui/Primitives';
+import { Skeleton } from '../ui/Skeleton';
 
 const categoryColors = ['#75ddd1', '#fae5ba', '#edb09c', '#d9d9d9', '#aeaeae'];
 
@@ -7,7 +9,7 @@ function formatCurrency(value) {
     return `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 }
 
-export function CategorySummary({ categories, loading }) {
+export const CategorySummary = memo(function CategorySummary({ categories, loading }) {
     const maxTotal = Math.max(...categories.map((category) => Number(category.total || 0)), 1);
 
     return (
@@ -27,10 +29,19 @@ export function CategorySummary({ categories, loading }) {
             <div className="space-y-3">
                 {loading ? (
                     [1, 2, 3].map((item) => (
-                        <div key={item} className="h-16 w-full animate-pulse rounded-[20px] bg-[#efefef]" />
+                        <div key={item} className="rounded-[22px] bg-[#f8f8f8] p-4">
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                                <Skeleton variant="text" className="w-24" />
+                                <Skeleton variant="text" className="w-20" />
+                            </div>
+                            <Skeleton variant="default" className="h-2 w-full" />
+                        </div>
                     ))
                 ) : categories.length === 0 ? (
-                    <div className="rounded-[24px] bg-[#f8f8f8] p-5 text-center">
+                    <div className="rounded-[24px] bg-gradient-to-br from-[#f8f8f8] to-white p-6 text-center animate-fade-in">
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#fae5ba]/70">
+                            <PieChart className="h-7 w-7 text-[#6e5523]" aria-hidden="true" />
+                        </div>
                         <p className="text-sm font-medium text-black">Belum ada kategori.</p>
                         <p className="hu-body mt-2 text-sm">Catat transaksi pengeluaran dari WhatsApp untuk mengisi daftar ini.</p>
                         <ButtonLink href="https://wa.me/628123456789" variant="secondary" className="mt-4" external>
@@ -64,4 +75,4 @@ export function CategorySummary({ categories, loading }) {
             </div>
         </section>
     );
-}
+});

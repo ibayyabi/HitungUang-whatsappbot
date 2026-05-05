@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { BarChart3 } from 'lucide-react';
 import {
     Bar,
@@ -40,8 +41,10 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 function EmptyChart() {
     return (
-        <div className="flex h-64 flex-col items-center justify-center rounded-[24px] bg-[#f8f8f8] p-6 text-center">
-            <BarChart3 className="mb-4 h-6 w-6 text-black" />
+        <div className="flex h-64 flex-col items-center justify-center rounded-[24px] bg-gradient-to-br from-[#f8f8f8] to-white p-6 text-center animate-fade-in">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#75ddd1]/20">
+                <BarChart3 className="h-7 w-7 text-[#176d64]" aria-hidden="true" />
+            </div>
             <p className="text-sm font-medium text-black">Belum ada data grafik.</p>
             <p className="hu-body mt-2 text-sm">Kirim transaksi dari WhatsApp untuk melihat tren.</p>
         </div>
@@ -103,7 +106,7 @@ function ChartBlock({ title, data, xKey }) {
     );
 }
 
-export function ExpenseCharts({ dailySeries, weeklySeries, loading }) {
+export const ExpenseCharts = memo(function ExpenseCharts({ dailySeries, weeklySeries, loading }) {
     if (loading) {
         return (
             <div className="chart-grid">
@@ -119,4 +122,4 @@ export function ExpenseCharts({ dailySeries, weeklySeries, loading }) {
             <ChartBlock title="Tren mingguan" data={weeklySeries} xKey="week" />
         </section>
     );
-}
+});

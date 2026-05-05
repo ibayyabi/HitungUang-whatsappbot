@@ -22,7 +22,7 @@ export default function LoginPage() {
         <PageShell>
             <AppHeader actionHref="/register" actionLabel="Daftar" secondaryHref="/" secondaryLabel="Beranda" />
             <section className="hu-shell grid min-h-[calc(100vh-92px)] items-center gap-12 py-14 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                <div className="min-w-0">
+                <div className="min-w-0 reveal-sequence">
                     <ButtonLink href="/" variant="ghost" className="mb-8 px-0">
                         <ArrowLeft className="h-4 w-4" />
                         Beranda
@@ -39,7 +39,7 @@ export default function LoginPage() {
                     </SectionIntro>
                 </div>
 
-                <Surface className="p-6 md:p-8">
+                <Surface className="p-6 md:p-8 animate-fade-in delay-200">
                     <Suspense
                         fallback={
                             <div className="flex flex-col items-center gap-4 py-10">

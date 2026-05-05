@@ -8,6 +8,13 @@ jest.mock('../services/aiParser', () => ({
 jest.mock('../services/dbService', () => ({
     getUserByTelegramId: jest.fn(),
     appendTransactions: jest.fn(),
+    getTotalExpensesThisMonth: jest.fn(),
+    getMonthlyAllocationSummary: jest.fn(),
+    updateLastAlertMonth: jest.fn(),
+    listActiveWallets: jest.fn(),
+    findWalletByNameExact: jest.fn(),
+    findWalletByName: jest.fn(),
+    incrementWalletBalance: jest.fn(),
     supabase: {}
 }));
 
@@ -51,6 +58,18 @@ describe('handleMessage', () => {
         jest.clearAllMocks();
         dbService.getUserByTelegramId.mockResolvedValue({ id: 'user-1', display_name: 'Ikhbar' });
         dbService.appendTransactions.mockResolvedValue({ success: true, insertedCount: 1 });
+        dbService.getTotalExpensesThisMonth.mockResolvedValue(0);
+        dbService.getMonthlyAllocationSummary.mockResolvedValue({
+            monthIncome: 1000000,
+            monthExpense: 0,
+            monthSavings: 0,
+            availableMoney: 1000000
+        });
+        dbService.updateLastAlertMonth.mockResolvedValue(true);
+        dbService.listActiveWallets.mockResolvedValue([]);
+        dbService.findWalletByNameExact.mockResolvedValue(null);
+        dbService.findWalletByName.mockResolvedValue(null);
+        dbService.incrementWalletBalance.mockResolvedValue(true);
         authLinkService.requestAuthLink.mockResolvedValue({
             actionLink: 'https://supabase.test/magic'
         });
@@ -153,6 +172,141 @@ describe('handleMessage', () => {
             mimetype: 'image/jpeg'
         }));
         expect(dbService.appendTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    test('mengirim alert ketika pengeluaran mencapai ambang 80 persen', async () => {
+        dbService.getUserByTelegramId.mockResolvedValue({
+            id: 'user-1',
+            display_name: 'Ikhbar',
+            target_pengeluaran_bulanan: 1000000,
+            last_alert_month: null
+        });
+        dbService.appendTransactions.mockResolvedValue({
+            success: true,
+            insertedCount: 1,
+            insertedTransactions: [{
+                item: 'Laptop',
+                harga: 800000,
+                kategori: 'belanja',
+                tipe: 'pengeluaran'
+            }]
+        });
+        dbService.getTotalExpensesThisMonth.mockResolvedValue(800000);
+        const msg = createMessage('Laptop 800rb');
+        aiParser.parseExpense.mockResolvedValue({
+            item: 'Laptop',
+            harga: 800000,
+            kategori: 'belanja',
+            tipe: 'pengeluaran'
+        });
+
+        await handleMessage(msg);
+
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('Berhasil Dicatat'));
+        expect(dbService.getTotalExpensesThisMonth).toHaveBeenCalled();
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('Warning'));
+        expect(dbService.updateLastAlertMonth).toHaveBeenCalled();
+    });
+
+    test('tidak menjalankan alert untuk pemasukan', async () => {
+        dbService.getUserByTelegramId.mockResolvedValue({
+            id: 'user-1',
+            display_name: 'Ikhbar',
+            target_pengeluaran_bulanan: 1000000,
+            last_alert_month: null
+        });
+        dbService.appendTransactions.mockResolvedValue({
+            success: true,
+            insertedCount: 1,
+            insertedTransactions: [{
+                item: 'Gaji',
+                harga: 5000000,
+                kategori: 'gaji',
+                tipe: 'pemasukan'
+            }]
+        });
+        const msg = createMessage('Gaji 5jt');
+        aiParser.parseExpense.mockResolvedValue({
+            item: 'Gaji',
+            harga: 5000000,
+            kategori: 'gaji',
+            tipe: 'pemasukan'
+        });
+
+        await handleMessage(msg);
+
+        expect(dbService.getTotalExpensesThisMonth).not.toHaveBeenCalled();
+    });
+
+    test('auto memilih dompet ketika user hanya punya satu dompet', async () => {
+        dbService.listActiveWallets.mockResolvedValue([{
+            id: 'wallet-1',
+            nama_dompet: 'Dana Darurat'
+        }]);
+        dbService.appendTransactions.mockImplementation(async (transactions) => ({
+            success: true,
+            insertedCount: transactions.length,
+            insertedTransactions: transactions
+        }));
+        const msg = createMessage('Nabung 100rb');
+        aiParser.parseExpense.mockResolvedValue({
+            item: 'Nabung',
+            harga: 100000,
+            kategori: 'tabungan',
+            tipe: 'tabungan'
+        });
+
+        await handleMessage(msg);
+
+        expect(dbService.appendTransactions).toHaveBeenCalledWith([expect.objectContaining({
+            wallet_id: 'wallet-1'
+        })]);
+        expect(dbService.incrementWalletBalance).toHaveBeenCalledWith('wallet-1', 'user-1', 100000);
+        expect(dbService.getTotalExpensesThisMonth).not.toHaveBeenCalled();
+    });
+
+    test('menolak tabungan ketika available money tidak cukup', async () => {
+        dbService.listActiveWallets.mockResolvedValue([{
+            id: 'wallet-1',
+            nama_dompet: 'Dana Darurat'
+        }]);
+        dbService.getMonthlyAllocationSummary.mockResolvedValue({
+            monthIncome: 100000,
+            monthExpense: 50000,
+            monthSavings: 25000,
+            availableMoney: 25000
+        });
+        const msg = createMessage('Nabung 100rb');
+        aiParser.parseExpense.mockResolvedValue({
+            item: 'Nabung',
+            harga: 100000,
+            kategori: 'tabungan',
+            tipe: 'tabungan'
+        });
+
+        await handleMessage(msg);
+
+        expect(dbService.appendTransactions).not.toHaveBeenCalled();
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('Available money bulan ini belum cukup'));
+    });
+
+    test('meminta nama dompet ketika user punya beberapa dompet', async () => {
+        dbService.listActiveWallets.mockResolvedValue([
+            { id: 'wallet-1', nama_dompet: 'Dana Darurat' },
+            { id: 'wallet-2', nama_dompet: 'Liburan' }
+        ]);
+        const msg = createMessage('Nabung 100rb');
+        aiParser.parseExpense.mockResolvedValue({
+            item: 'Nabung',
+            harga: 100000,
+            kategori: 'tabungan',
+            tipe: 'tabungan'
+        });
+
+        await handleMessage(msg);
+
+        expect(dbService.appendTransactions).not.toHaveBeenCalled();
+        expect(msg.reply).toHaveBeenCalledWith(expect.stringContaining('beberapa dompet'));
     });
 
     test('memproses voice Telegram dengan parseAudio', async () => {
