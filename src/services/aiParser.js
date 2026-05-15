@@ -1,4 +1,7 @@
-const dotenv = require('dotenv');
+const { loadEnv } = require('../config/env');
+
+loadEnv();
+
 const { EXPENSE_PARSER_PROMPT } = require('../config/prompts');
 const { sanitizeInput } = require('../utils/sanitizer');
 const {
@@ -14,8 +17,6 @@ const {
     isValidTransactionType
 } = require('../../shared/contracts');
 
-
-dotenv.config();
 
 const PARSE_CACHE_TTL_MS = Number.parseInt(process.env.LLM_PARSE_CACHE_TTL_MS || `${10 * 60 * 1000}`, 10);
 const PARSE_CACHE_MAX_ENTRIES = Number.parseInt(process.env.LLM_PARSE_CACHE_MAX_ENTRIES || '500', 10);

@@ -1,12 +1,18 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const logger = require("./logger");
+const { loadEnv } = require("../config/env");
+
+loadEnv();
+
+const PRIMARY_MODEL =
+  process.env.GEMINI_MODEL || process.env.GEMINI_TEXT_MODEL || "gemma-4-26b";
 
 /**
  * List model yang tersedia sesuai urutan prioritas.
  * Gemma 3 27B IT adalah model utama, lainnya sebagai fallback.
  */
 const MODEL_PRIORITY = [
-  process.env.GEMINI_MODEL || "gemma-4-26b",
+  PRIMARY_MODEL,
   "gemma-4-31b",
   "gemini-3-flash",
   "gemini-3.1-flash-lite",

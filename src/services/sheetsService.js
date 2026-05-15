@@ -1,8 +1,8 @@
 const { google } = require('googleapis');
 const path = require('path');
-const dotenv = require('dotenv');
+const { loadEnv } = require('../config/env');
 
-dotenv.config();
+loadEnv();
 
 class SheetsService {
     constructor() {

@@ -1,12 +1,13 @@
+const { loadEnv } = require('./config/env');
+
+loadEnv();
+
 const http = require('http');
 const { URL } = require('url');
 const { handleMessage } = require('./handlers/messageHandler');
 const fonnteService = require('./services/fonnteService');
 const RateLimiter = require('./utils/rateLimiter');
 const logger = require('./utils/logger');
-const dotenv = require('dotenv');
-
-dotenv.config();
 
 const limiter = new RateLimiter(10, 60000);
 const port = Number(process.env.PORT || process.env.BOT_PORT || 3001);

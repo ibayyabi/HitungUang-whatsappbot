@@ -6,10 +6,12 @@ const {
     DEFAULT_TRANSACTION_TYPE,
     PROFILE_FIELDS
 } = require('../../shared/contracts');
+const { loadEnv } = require('../config/env');
+
 // Load dotenv only if not in Next.js environment (which loads it automatically)
 if (typeof process.env.NEXT_RUNTIME === 'undefined' && !process.env.SUPABASE_URL) {
     try {
-        require('dotenv').config();
+        loadEnv();
     } catch (e) {
         // Ignore
     }
