@@ -13,6 +13,7 @@ const PRIMARY_MODEL =
  */
 const MODEL_PRIORITY = [
   PRIMARY_MODEL,
+  "gemma-4-26b",
   "gemma-4-31b",
   "gemini-3-flash",
   "gemini-3.1-flash-lite",

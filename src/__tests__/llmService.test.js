@@ -1,3 +1,5 @@
+process.env.GEMINI_MODEL = 'gemma-3-27b-it';
+
 const { LLMService } = require('../utils/llmService');
 const logger = require('../utils/logger');
 

@@ -30,7 +30,7 @@ const EXPENSE_CATEGORY_KEYWORDS = [
     { kategori: 'hiburan', keywords: ['hiburan', 'nonton', 'bioskop', 'game', 'netflix', 'spotify', 'konser'] },
     { kategori: 'tagihan', keywords: ['tagihan', 'listrik', 'air', 'wifi', 'internet', 'pulsa', 'token', 'cicilan', 'sewa'] },
     { kategori: 'kesehatan', keywords: ['obat', 'dokter', 'klinik', 'rumah sakit', 'vitamin', 'kesehatan'] },
-    { kategori: 'pendidikan', keywords: ['sekolah', 'kuliah', 'buku', 'kursus', 'pendidikan'] }
+    { kategori: 'pendidikan', keywords: ['sekolah', 'kuliah', 'buku', 'kursus', 'pendidikan', 'ukt', 'spp', 'uang kuliah', 'biaya kuliah', 'semester', 'kampus'] }
 ];
 
 const INCOME_CATEGORY_KEYWORDS = [
@@ -187,6 +187,18 @@ function detectCategory(normalizedText, tipe) {
     return match ? match.kategori : fallback;
 }
 
+function isGenericCategory(kategori, tipe) {
+    if (tipe === 'pemasukan') {
+        return kategori === 'lainnya_masuk';
+    }
+
+    if (tipe === 'pengeluaran') {
+        return kategori === DEFAULT_TRANSACTION_CATEGORY;
+    }
+
+    return false;
+}
+
 function splitLocation(textWithoutAmount) {
     const locationMatch = textWithoutAmount.match(/\bdi\s+(.+)$/i);
 
@@ -231,7 +243,8 @@ function buildSavingItem(itemText) {
     };
 }
 
-function parseSimpleTransaction(text) {
+function parseSimpleTransaction(text, options = {}) {
+    const allowGenericCategory = Boolean(options.allowGenericCategory);
     const normalizedText = normalizeSpaces(text).toLowerCase();
     const amountMatches = collectCurrencyMatches(text);
 
@@ -250,6 +263,11 @@ function parseSimpleTransaction(text) {
 
     const tipe = detectTransactionType(normalizedText);
     const kategori = detectCategory(normalizedText, tipe);
+
+    if (!allowGenericCategory && isGenericCategory(kategori, tipe)) {
+        return null;
+    }
+
     const { itemText, lokasi } = splitLocation(textWithoutAmount);
     const strippedItemText = stripCommonWords(itemText, tipe);
 
@@ -384,7 +402,9 @@ class AIParser {
                 return cached;
             }
 
-            const deterministicResult = parseSimpleTransaction(normalizedText);
+            const deterministicResult = parseSimpleTransaction(normalizedText, {
+                allowGenericCategory: process.env.LLM_FALLBACK_ENABLED === 'false'
+            });
 
             if (deterministicResult) {
                 logger.info(`LLM parser skipped: deterministic_transaction input="${normalizedText}" llm_called=false`);

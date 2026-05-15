@@ -102,6 +102,50 @@ describe('aiParser helpers', () => {
         });
     });
 
+    test('parse deterministik UKT sebagai kategori pendidikan tanpa LLM', async () => {
+        const result = await aiParser.parseExpense('UKT 11.000.000');
+
+        expect(result).toEqual({
+            item: 'Ukt',
+            harga: 11000000,
+            kategori: 'pendidikan',
+            lokasi: null,
+            tipe: 'pengeluaran'
+        });
+        expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
+
+    test('fallback ke LLM ketika kategori deterministik masih generik', async () => {
+        mockGenerateContent.mockResolvedValue({
+            response: {
+                text: () => '{"item":"Helm","harga":100000,"kategori":"belanja","tipe":"pengeluaran"}'
+            }
+        });
+
+        const result = await aiParser.parseExpense('Helm 100rb');
+
+        expect(result).toEqual({
+            item: 'Helm',
+            harga: 100000,
+            kategori: 'belanja',
+            lokasi: null,
+            tipe: 'pengeluaran'
+        });
+        expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+    });
+
+    test('tetap bisa memakai kategori generik jika fallback LLM dimatikan', () => {
+        const result = parseSimpleTransaction('Helm 100rb', { allowGenericCategory: true });
+
+        expect(result).toEqual({
+            item: 'Helm',
+            harga: 100000,
+            kategori: 'lainnya',
+            lokasi: null,
+            tipe: 'pengeluaran'
+        });
+    });
+
     test('meng-cache fallback LLM untuk input yang sama', async () => {
         mockGenerateContent.mockResolvedValue({
             response: {
