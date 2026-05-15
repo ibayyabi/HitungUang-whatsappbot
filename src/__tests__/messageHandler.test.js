@@ -11,6 +11,7 @@ jest.mock('../services/dbService', () => ({
     getTotalExpensesThisMonth: jest.fn(),
     getMonthlyAllocationSummary: jest.fn(),
     updateLastAlertMonth: jest.fn(),
+    setOnboarded: jest.fn(),
     listActiveWallets: jest.fn(),
     findWalletByNameExact: jest.fn(),
     findWalletByName: jest.fn(),
@@ -56,7 +57,7 @@ function createMessage(text, overrides = {}) {
 describe('handleMessage', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        dbService.getUserByTelegramId.mockResolvedValue({ id: 'user-1', display_name: 'Ikhbar' });
+        dbService.getUserByTelegramId.mockResolvedValue({ id: 'user-1', display_name: 'Ikhbar', is_onboarded: true });
         dbService.appendTransactions.mockResolvedValue({ success: true, insertedCount: 1 });
         dbService.getTotalExpensesThisMonth.mockResolvedValue(0);
         dbService.getMonthlyAllocationSummary.mockResolvedValue({
@@ -66,6 +67,7 @@ describe('handleMessage', () => {
             availableMoney: 1000000
         });
         dbService.updateLastAlertMonth.mockResolvedValue(true);
+        dbService.setOnboarded.mockResolvedValue(true);
         dbService.listActiveWallets.mockResolvedValue([]);
         dbService.findWalletByNameExact.mockResolvedValue(null);
         dbService.findWalletByName.mockResolvedValue(null);
@@ -101,7 +103,10 @@ describe('handleMessage', () => {
 
         await handleMessage(msg);
 
-        expect(nl2sqlService.processNLQuery).toHaveBeenCalledWith(msg, '12345', { id: 'user-1', display_name: 'Ikhbar' });
+        expect(nl2sqlService.processNLQuery).toHaveBeenCalledWith(msg, '12345', expect.objectContaining({
+            id: 'user-1',
+            display_name: 'Ikhbar'
+        }));
         expect(dbService.appendTransactions).not.toHaveBeenCalled();
         expect(msg.reply).toHaveBeenCalledWith('ringkasan');
     });
@@ -178,6 +183,7 @@ describe('handleMessage', () => {
         dbService.getUserByTelegramId.mockResolvedValue({
             id: 'user-1',
             display_name: 'Ikhbar',
+            is_onboarded: true,
             target_pengeluaran_bulanan: 1000000,
             last_alert_month: null
         });
@@ -212,6 +218,7 @@ describe('handleMessage', () => {
         dbService.getUserByTelegramId.mockResolvedValue({
             id: 'user-1',
             display_name: 'Ikhbar',
+            is_onboarded: true,
             target_pengeluaran_bulanan: 1000000,
             last_alert_month: null
         });

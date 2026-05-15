@@ -38,6 +38,7 @@ describe('shared contracts', () => {
             'target_pengeluaran_bulanan',
             'target_pemasukan_bulanan',
             'last_alert_month',
+            'is_onboarded',
             'created_at'
         ]);
         expect(TRANSACTION_FIELDS.database).toContain('catatan_asli');

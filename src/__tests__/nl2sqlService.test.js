@@ -13,7 +13,12 @@ jest.mock('../utils/logger', () => ({
     error: jest.fn()
 }));
 
-const { buildQueryPlan, formatDataResponse, validateSQL } = require('../services/nl2sqlService');
+const {
+    buildDeterministicQueryPlan,
+    buildQueryPlan,
+    formatDataResponse,
+    validateSQL
+} = require('../services/nl2sqlService');
 
 describe('nl2sqlService', () => {
     test('memvalidasi SQL select yang aman dan terikat ke user', () => {
@@ -36,5 +41,42 @@ describe('nl2sqlService', () => {
         expect(response).toContain('Rp 35.000');
         expect(response).toContain('2 transaksi');
         expect(response).toContain('bulan ini');
+    });
+
+    test('membuat deterministic plan untuk total pengeluaran bulan ini', () => {
+        const plan = buildDeterministicQueryPlan('Total pengeluaran bulan ini berapa?');
+
+        expect(plan).toEqual(expect.objectContaining({
+            metric: 'sum',
+            tipe: 'pengeluaran',
+            kategori: null,
+            order: 'desc',
+            limit: 10
+        }));
+        expect(plan.timeRange.label).toBe('bulan ini');
+        expect(plan.timeRange.startDate).toBeInstanceOf(Date);
+    });
+
+    test('membuat deterministic plan untuk daftar transaksi terakhir', () => {
+        const plan = buildDeterministicQueryPlan('Tampilkan 5 transaksi terakhir');
+
+        expect(plan).toEqual(expect.objectContaining({
+            metric: 'list',
+            tipe: null,
+            kategori: null,
+            order: 'desc',
+            limit: 5
+        }));
+    });
+
+    test('mendeteksi kategori dan tipe dari pertanyaan umum', () => {
+        const plan = buildDeterministicQueryPlan('berapa pengeluaran makan minggu ini');
+
+        expect(plan).toEqual(expect.objectContaining({
+            metric: 'sum',
+            tipe: 'pengeluaran',
+            kategori: 'makan'
+        }));
+        expect(plan.timeRange.label).toBe('minggu ini');
     });
 });

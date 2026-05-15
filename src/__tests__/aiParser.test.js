@@ -1,9 +1,11 @@
 process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'test-key';
 
+const mockGenerateContent = jest.fn();
+
 jest.mock('@google/generative-ai', () => ({
     GoogleGenerativeAI: jest.fn(() => ({
         getGenerativeModel: jest.fn(() => ({
-            generateContent: jest.fn()
+            generateContent: mockGenerateContent
         }))
     }))
 }));
@@ -14,9 +16,20 @@ jest.mock('../utils/logger', () => ({
     error: jest.fn()
 }));
 
-const { extractJsonPayload, normalizeParsedExpense } = require('../services/aiParser');
+const aiParser = require('../services/aiParser');
+const {
+    clearParseCache,
+    extractJsonPayload,
+    normalizeParsedExpense,
+    parseSimpleTransaction
+} = aiParser;
 
 describe('aiParser helpers', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        clearParseCache();
+    });
+
     test('mengekstrak JSON meski model menambahkan kalimat pembuka', () => {
         const payload = extractJsonPayload('Berikut hasilnya:\n{"item":"Kopi","harga":18000,"tipe":"pengeluaran"}');
         expect(payload).toBe('{"item":"Kopi","harga":18000,"tipe":"pengeluaran"}');
@@ -62,5 +75,44 @@ describe('aiParser helpers', () => {
         });
 
         expect(result.harga).toBe(2000000000);
+    });
+
+    test('parse deterministik transaksi teks sederhana tanpa LLM', async () => {
+        const result = await aiParser.parseExpense('Bakso 15rb');
+
+        expect(result).toEqual({
+            item: 'Bakso',
+            harga: 15000,
+            kategori: 'makan',
+            lokasi: null,
+            tipe: 'pengeluaran'
+        });
+        expect(mockGenerateContent).not.toHaveBeenCalled();
+    });
+
+    test('parse deterministik pemasukan dan nominal juta', () => {
+        const result = parseSimpleTransaction('Gaji bulan ini cair 5 juta');
+
+        expect(result).toEqual({
+            item: 'Gaji Bulan Ini',
+            harga: 5000000,
+            kategori: 'gaji',
+            lokasi: null,
+            tipe: 'pemasukan'
+        });
+    });
+
+    test('meng-cache fallback LLM untuk input yang sama', async () => {
+        mockGenerateContent.mockResolvedValue({
+            response: {
+                text: () => '{"item":"Bensin dan Parkir","harga":30000,"kategori":"transport","tipe":"pengeluaran"}'
+            }
+        });
+
+        const first = await aiParser.parseExpense('Bensin 20rb dan parkir 10rb');
+        const second = await aiParser.parseExpense('Bensin 20rb dan parkir 10rb');
+
+        expect(first).toEqual(second);
+        expect(mockGenerateContent).toHaveBeenCalledTimes(1);
     });
 });
