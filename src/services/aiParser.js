@@ -1,9 +1,13 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const dotenv = require('dotenv');
 const { EXPENSE_PARSER_PROMPT } = require('../config/prompts');
 const { sanitizeInput } = require('../utils/sanitizer');
-const { normalizeCurrencyText, parseCurrencyAmount } = require('../utils/currencyNormalizer');
+const {
+    CURRENCY_TOKEN_PATTERN,
+    normalizeCurrencyText,
+    parseCurrencyAmount
+} = require('../utils/currencyNormalizer');
 const logger = require('../utils/logger');
+const llmService = require('../utils/llmService');
 const {
     DEFAULT_TRANSACTION_CATEGORY,
     isValidTransactionCategory,
@@ -12,6 +16,265 @@ const {
 
 
 dotenv.config();
+
+const PARSE_CACHE_TTL_MS = Number.parseInt(process.env.LLM_PARSE_CACHE_TTL_MS || `${10 * 60 * 1000}`, 10);
+const PARSE_CACHE_MAX_ENTRIES = Number.parseInt(process.env.LLM_PARSE_CACHE_MAX_ENTRIES || '500', 10);
+
+const parseCache = new Map();
+
+const EXPENSE_CATEGORY_KEYWORDS = [
+    { kategori: 'makan', keywords: ['makan', 'minum', 'jajan', 'bakso', 'nasi', 'mie', 'ayam', 'sate', 'kopi', 'ngopi', 'resto', 'restoran', 'warung', 'sarapan'] },
+    { kategori: 'transport', keywords: ['bensin', 'parkir', 'tol', 'ojek', 'gojek', 'grab', 'taxi', 'taksi', 'bus', 'kereta', 'transport'] },
+    { kategori: 'belanja', keywords: ['belanja', 'beli', 'alfamart', 'indomaret', 'supermarket', 'shopee', 'tokopedia', 'baju', 'sepatu', 'pakaian'] },
+    { kategori: 'hiburan', keywords: ['hiburan', 'nonton', 'bioskop', 'game', 'netflix', 'spotify', 'konser'] },
+    { kategori: 'tagihan', keywords: ['tagihan', 'listrik', 'air', 'wifi', 'internet', 'pulsa', 'token', 'cicilan', 'sewa'] },
+    { kategori: 'kesehatan', keywords: ['obat', 'dokter', 'klinik', 'rumah sakit', 'vitamin', 'kesehatan'] },
+    { kategori: 'pendidikan', keywords: ['sekolah', 'kuliah', 'buku', 'kursus', 'pendidikan'] }
+];
+
+const INCOME_CATEGORY_KEYWORDS = [
+    { kategori: 'gaji', keywords: ['gaji', 'salary'] },
+    { kategori: 'freelance', keywords: ['freelance', 'freelancer'] },
+    { kategori: 'bisnis', keywords: ['bisnis', 'jualan', 'usaha'] },
+    { kategori: 'transfer_masuk', keywords: ['transfer dari', 'terima transfer', 'ditransfer', 'tf dari'] },
+    { kategori: 'investasi', keywords: ['investasi', 'dividen', 'saham', 'crypto'] }
+];
+
+const INCOME_KEYWORDS = [
+    'gaji',
+    'bonus',
+    'freelance',
+    'komisi',
+    'pendapatan',
+    'pemasukan',
+    'income',
+    'uang masuk',
+    'terima transfer',
+    'transfer dari',
+    'tf dari',
+    'cashback'
+];
+
+const SAVING_KEYWORDS = ['nabung', 'menabung', 'tabung', 'tabungan'];
+
+function cloneParsed(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function clearParseCache() {
+    parseCache.clear();
+}
+
+function getCachedParse(cacheKey) {
+    const cached = parseCache.get(cacheKey);
+
+    if (!cached) {
+        return null;
+    }
+
+    if (Date.now() - cached.createdAt > PARSE_CACHE_TTL_MS) {
+        parseCache.delete(cacheKey);
+        return null;
+    }
+
+    return cloneParsed(cached.value);
+}
+
+function setCachedParse(cacheKey, value) {
+    if (parseCache.size >= PARSE_CACHE_MAX_ENTRIES) {
+        const oldestKey = parseCache.keys().next().value;
+        if (oldestKey) {
+            parseCache.delete(oldestKey);
+        }
+    }
+
+    parseCache.set(cacheKey, {
+        createdAt: Date.now(),
+        value: cloneParsed(value)
+    });
+}
+
+function normalizeSpaces(value) {
+    return String(value || '')
+        .replace(/[,\s]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function titleCase(value) {
+    return normalizeSpaces(value)
+        .split(' ')
+        .filter(Boolean)
+        .map((word) => {
+            const lowered = word.toLowerCase();
+            return `${lowered.charAt(0).toUpperCase()}${lowered.slice(1)}`;
+        })
+        .join(' ');
+}
+
+function hasAnyKeyword(text, keywords) {
+    return keywords.some((keyword) => text.includes(keyword));
+}
+
+function collectCurrencyMatches(text) {
+    const matches = [];
+    CURRENCY_TOKEN_PATTERN.lastIndex = 0;
+
+    let match;
+    while ((match = CURRENCY_TOKEN_PATTERN.exec(text)) !== null) {
+        const rawToken = match[0];
+        const hasPrefix = /^rp/i.test(rawToken.trim());
+        const hasSuffix = Boolean(match[2]);
+        const nextIndex = CURRENCY_TOKEN_PATTERN.lastIndex;
+        const amount = parseCurrencyAmount(rawToken);
+        CURRENCY_TOKEN_PATTERN.lastIndex = nextIndex;
+
+        if ((hasPrefix || hasSuffix || amount >= 1000) && Number.isFinite(amount) && amount > 0) {
+            matches.push({
+                amount,
+                index: match.index,
+                length: rawToken.length,
+                rawToken
+            });
+        }
+    }
+
+    return matches;
+}
+
+function stripCommonWords(value, tipe) {
+    let result = normalizeSpaces(value);
+
+    result = result
+        .replace(/\b(aku|saya|gw|gue|barusan|tadi|hari ini)\b/gi, ' ')
+        .replace(/\b(di|ke)\s*$/gi, ' ');
+
+    if (tipe === 'pemasukan') {
+        result = result
+            .replace(/\b(terima|dapat|dapet|menerima|masuk|cair)\b/gi, ' ')
+            .replace(/\b(dari)\s*$/gi, ' ');
+    } else if (tipe === 'tabungan') {
+        result = result.replace(/\b(ke|untuk)\s*$/gi, ' ');
+    } else {
+        result = result.replace(/^\b(beli|bayar|jajan|topup|top up|isi|buat|untuk|masuk|keluar)\b\s*/gi, ' ');
+    }
+
+    return normalizeSpaces(result);
+}
+
+function detectTransactionType(normalizedText) {
+    if (hasAnyKeyword(normalizedText, SAVING_KEYWORDS)) {
+        return 'tabungan';
+    }
+
+    if (hasAnyKeyword(normalizedText, INCOME_KEYWORDS)) {
+        return 'pemasukan';
+    }
+
+    return 'pengeluaran';
+}
+
+function detectCategory(normalizedText, tipe) {
+    if (tipe === 'tabungan') {
+        return 'tabungan';
+    }
+
+    const keywordGroups = tipe === 'pemasukan' ? INCOME_CATEGORY_KEYWORDS : EXPENSE_CATEGORY_KEYWORDS;
+    const fallback = tipe === 'pemasukan' ? 'lainnya_masuk' : DEFAULT_TRANSACTION_CATEGORY;
+    const match = keywordGroups.find((group) => hasAnyKeyword(normalizedText, group.keywords));
+
+    return match ? match.kategori : fallback;
+}
+
+function splitLocation(textWithoutAmount) {
+    const locationMatch = textWithoutAmount.match(/\bdi\s+(.+)$/i);
+
+    if (!locationMatch) {
+        return {
+            itemText: textWithoutAmount,
+            lokasi: null
+        };
+    }
+
+    const itemText = normalizeSpaces(textWithoutAmount.slice(0, locationMatch.index));
+    const lokasi = normalizeSpaces(locationMatch[1]);
+
+    if (!itemText || !lokasi) {
+        return {
+            itemText: textWithoutAmount,
+            lokasi: null
+        };
+    }
+
+    return {
+        itemText,
+        lokasi
+    };
+}
+
+function buildSavingItem(itemText) {
+    const stripped = normalizeSpaces(itemText.replace(/^\b(nabung|menabung|tabung|tabungan)\b\s*/i, ''));
+
+    if (!stripped) {
+        return {
+            item: 'Nabung',
+            wallet_name: null
+        };
+    }
+
+    const walletName = titleCase(stripped);
+
+    return {
+        item: `Nabung ${walletName}`,
+        wallet_name: walletName
+    };
+}
+
+function parseSimpleTransaction(text) {
+    const normalizedText = normalizeSpaces(text).toLowerCase();
+    const amountMatches = collectCurrencyMatches(text);
+
+    if (amountMatches.length !== 1) {
+        return null;
+    }
+
+    const amountMatch = amountMatches[0];
+    const textWithoutAmount = normalizeSpaces(
+        `${text.slice(0, amountMatch.index)} ${text.slice(amountMatch.index + amountMatch.length)}`
+    );
+
+    if (!/[a-zA-Z\u00C0-\u024F]/.test(textWithoutAmount)) {
+        return null;
+    }
+
+    const tipe = detectTransactionType(normalizedText);
+    const kategori = detectCategory(normalizedText, tipe);
+    const { itemText, lokasi } = splitLocation(textWithoutAmount);
+    const strippedItemText = stripCommonWords(itemText, tipe);
+
+    if (!strippedItemText) {
+        return null;
+    }
+
+    let item = titleCase(strippedItemText);
+    const parsed = {
+        item,
+        harga: amountMatch.amount,
+        kategori,
+        lokasi: lokasi ? titleCase(lokasi) : null,
+        tipe
+    };
+
+    if (tipe === 'tabungan') {
+        const savingItem = buildSavingItem(strippedItemText);
+        parsed.item = savingItem.item;
+        if (savingItem.wallet_name) {
+            parsed.wallet_name = savingItem.wallet_name;
+        }
+    }
+
+    return normalizeParsedExpense(parsed);
+}
 
 function extractJsonPayload(responseText) {
     const trimmed = (responseText || '').trim();
@@ -102,12 +365,7 @@ function normalizeParsedExpense(parsed) {
 
 class AIParser {
     constructor() {
-        if (!process.env.GEMINI_API_KEY) {
-            throw new Error('GEMINI_API_KEY is not defined in .env file');
-        }
-        this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        // Menggunakan Gemini Flash untuk kecepatan dan efisiensi
-        this.model = this.genAI.getGenerativeModel({ model: "gemma-3-27b-it" });
+        // Initialization is now handled by llmService
     }
 
     /**
@@ -117,9 +375,36 @@ class AIParser {
         try {
             const cleanText = sanitizeInput(text);
             const normalizedText = normalizeCurrencyText(cleanText);
+            const cacheKey = `text:${normalizedText.toLowerCase()}`;
+            const cached = getCachedParse(cacheKey);
+
+            if (cached) {
+                logger.info(`LLM parser skipped: cache_hit input="${normalizedText}" llm_called=false`);
+                return cached;
+            }
+
+            const deterministicResult = parseSimpleTransaction(normalizedText);
+
+            if (deterministicResult) {
+                logger.info(`LLM parser skipped: deterministic_transaction input="${normalizedText}" llm_called=false`);
+                setCachedParse(cacheKey, deterministicResult);
+                return deterministicResult;
+            }
+
+            if (process.env.LLM_FALLBACK_ENABLED === 'false') {
+                logger.warn(`LLM parser disabled and deterministic parser could not parse input="${normalizedText}"`);
+                throw new Error('LLM fallback disabled');
+            }
+
             const prompt = `${EXPENSE_PARSER_PROMPT}\n\nInput: "${normalizedText}"\nOutput:`;
-            const result = await this.model.generateContent(prompt);
-            return this._processResult(result);
+            const { result, modelName } = await llmService.generateContentWithFallback(prompt, {
+                maxOutputTokens: 512
+            });
+            
+            logger.info(`LLM parser called: reason=fallback_text model=${modelName} llm_called=true`);
+            const parsed = await this._processResult(result);
+            setCachedParse(cacheKey, parsed);
+            return parsed;
         } catch (error) {
             logger.error(`Error in AI Parser (Text): ${error.message}`);
             throw error;
@@ -141,7 +426,11 @@ class AIParser {
                 }
             ];
 
-            const result = await this.model.generateContent([prompt, ...imageParts]);
+            const { result, modelName } = await llmService.generateContentWithFallback([prompt, ...imageParts], {
+                maxOutputTokens: 768
+            });
+
+            logger.info(`LLM parser called: reason=media_image model=${modelName} llm_called=true`);
             return this._processResult(result);
         } catch (error) {
             logger.error(`Error in AI Parser (Image): ${error.message}`);
@@ -164,7 +453,11 @@ class AIParser {
                 }
             ];
 
-            const result = await this.model.generateContent([prompt, ...audioParts]);
+            const { result, modelName } = await llmService.generateContentWithFallback([prompt, ...audioParts], {
+                maxOutputTokens: 768
+            });
+
+            logger.info(`LLM parser called: reason=media_audio model=${modelName} llm_called=true`);
             return this._processResult(result);
         } catch (error) {
             logger.error(`Error in AI Parser (Audio): ${error.message}`);
@@ -191,5 +484,7 @@ class AIParser {
 
 module.exports = new AIParser();
 module.exports.AIParser = AIParser;
+module.exports.clearParseCache = clearParseCache;
 module.exports.extractJsonPayload = extractJsonPayload;
 module.exports.normalizeParsedExpense = normalizeParsedExpense;
+module.exports.parseSimpleTransaction = parseSimpleTransaction;

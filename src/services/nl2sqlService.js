@@ -1,13 +1,44 @@
 const aiParser = require('./aiParser');
 const dbService = require('./dbService');
 const logger = require('../utils/logger');
+const llmService = require('../utils/llmService');
 const { sanitizeInput } = require('../utils/sanitizer');
+const {
+    EXPENSE_CATEGORIES,
+    INCOME_CATEGORIES,
+    SAVING_CATEGORIES
+} = require('../../shared/contracts');
 
 const BASE_SELECT = 'id,item,harga,kategori,lokasi,catatan_asli,tanggal,tipe';
 const MAX_ROWS = 50;
+const AGGREGATE_MAX_ROWS = 1000;
+
+const QUERY_CATEGORY_KEYWORDS = [
+    { kategori: 'makan', keywords: ['makan', 'makanan', 'jajan', 'kopi', 'ngopi', 'bakso', 'nasi'] },
+    { kategori: 'transport', keywords: ['transport', 'bensin', 'parkir', 'tol', 'ojek', 'gojek', 'grab', 'taxi', 'taksi'] },
+    { kategori: 'belanja', keywords: ['belanja', 'beli', 'shopping', 'shopee', 'tokopedia', 'alfamart', 'indomaret'] },
+    { kategori: 'hiburan', keywords: ['hiburan', 'nonton', 'bioskop', 'game', 'netflix', 'spotify'] },
+    { kategori: 'tagihan', keywords: ['tagihan', 'listrik', 'air', 'wifi', 'internet', 'pulsa', 'token', 'cicilan', 'sewa'] },
+    { kategori: 'kesehatan', keywords: ['kesehatan', 'obat', 'dokter', 'klinik', 'rumah sakit'] },
+    { kategori: 'pendidikan', keywords: ['pendidikan', 'sekolah', 'kuliah', 'buku', 'kursus'] },
+    { kategori: 'gaji', keywords: ['gaji', 'salary'] },
+    { kategori: 'freelance', keywords: ['freelance', 'freelancer'] },
+    { kategori: 'bisnis', keywords: ['bisnis', 'jualan', 'usaha'] },
+    { kategori: 'transfer_masuk', keywords: ['transfer masuk', 'transfer dari', 'ditransfer', 'tf dari'] },
+    { kategori: 'investasi', keywords: ['investasi', 'dividen', 'saham', 'crypto'] },
+    { kategori: 'tabungan', keywords: ['tabungan', 'nabung'] }
+];
 
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeText(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function includesAny(text, keywords) {
+    return keywords.some((keyword) => text.includes(keyword));
 }
 
 function startOfToday() {
@@ -26,6 +57,151 @@ function startOfWeek() {
 function startOfMonth() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function buildTextTimeRange(normalizedText) {
+    if (/\b(hari ini|today)\b/.test(normalizedText)) {
+        return { label: 'hari ini', startDate: startOfToday() };
+    }
+
+    if (/\b(minggu ini|pekan ini|week)\b/.test(normalizedText)) {
+        return { label: 'minggu ini', startDate: startOfWeek() };
+    }
+
+    if (/\b(bulan ini|month)\b/.test(normalizedText)) {
+        return { label: 'bulan ini', startDate: startOfMonth() };
+    }
+
+    return { label: 'seluruh periode', startDate: null };
+}
+
+function detectTextMetric(normalizedText) {
+    if (/\b(jumlah transaksi|jumlah catatan|berapa kali|berapa banyak transaksi|berapa jumlah)\b/.test(normalizedText)) {
+        return 'count';
+    }
+
+    if (/\b(total|berapa|rekap|ringkas|summary|habis)\b/.test(normalizedText)) {
+        return 'sum';
+    }
+
+    if (/\b(tampilkan|daftar|list|riwayat|transaksi|catatan|terakhir)\b/.test(normalizedText)) {
+        return 'list';
+    }
+
+    return null;
+}
+
+function detectTextType(normalizedText) {
+    if (/\b(tabungan|nabung)\b/.test(normalizedText)) {
+        return 'tabungan';
+    }
+
+    if (/\b(pemasukan|pendapatan|income|uang masuk|gaji|bonus|freelance|komisi|transfer masuk)\b/.test(normalizedText)) {
+        return 'pemasukan';
+    }
+
+    if (/\b(pengeluaran|belanja|keluar|expense|bayar|beli)\b/.test(normalizedText)) {
+        return 'pengeluaran';
+    }
+
+    return null;
+}
+
+function categoryToType(kategori) {
+    if (EXPENSE_CATEGORIES.includes(kategori)) {
+        return 'pengeluaran';
+    }
+
+    if (INCOME_CATEGORIES.includes(kategori)) {
+        return 'pemasukan';
+    }
+
+    if (SAVING_CATEGORIES.includes(kategori)) {
+        return 'tabungan';
+    }
+
+    return null;
+}
+
+function detectTextCategory(normalizedText) {
+    const match = QUERY_CATEGORY_KEYWORDS.find((group) => includesAny(normalizedText, group.keywords));
+    return match ? match.kategori : null;
+}
+
+function detectTextOrder(normalizedText) {
+    return /\b(terlama|awal|pertama|asc)\b/.test(normalizedText) ? 'asc' : 'desc';
+}
+
+function detectTextLimit(normalizedText) {
+    const explicitLimit = normalizedText.match(/\b(?:limit|terakhir|top)\s+(\d{1,3})\b/);
+
+    if (explicitLimit) {
+        return Math.min(Number.parseInt(explicitLimit[1], 10), MAX_ROWS);
+    }
+
+    const leadingLimit = normalizedText.match(/\b(?:tampilkan|daftar|list)\s+(\d{1,3})\b/);
+
+    if (leadingLimit) {
+        return Math.min(Number.parseInt(leadingLimit[1], 10), MAX_ROWS);
+    }
+
+    if (/\b(semua|all)\b/.test(normalizedText)) {
+        return MAX_ROWS;
+    }
+
+    return 10;
+}
+
+function hasSupportedDeterministicIntent(normalizedText) {
+    if (/\b(saldo|sisa|rata-rata|rata rata|perbandingan|bandingkan)\b/.test(normalizedText)) {
+        return false;
+    }
+
+    return includesAny(normalizedText, [
+        'total',
+        'berapa',
+        'rekap',
+        'ringkas',
+        'summary',
+        'tampilkan',
+        'daftar',
+        'list',
+        'riwayat',
+        'transaksi',
+        'catatan',
+        'pengeluaran',
+        'pemasukan',
+        'pendapatan',
+        'tabungan',
+        'belanja'
+    ]);
+}
+
+function buildDeterministicQueryPlan(text) {
+    const normalizedText = normalizeText(text);
+
+    if (!normalizedText || !hasSupportedDeterministicIntent(normalizedText)) {
+        return null;
+    }
+
+    const kategori = detectTextCategory(normalizedText);
+    const tipeFromText = detectTextType(normalizedText);
+    const tipe = tipeFromText || categoryToType(kategori);
+    const metric = detectTextMetric(normalizedText) || (tipe || kategori ? 'list' : null);
+
+    if (!metric) {
+        return null;
+    }
+
+    return {
+        metric,
+        order: detectTextOrder(normalizedText),
+        limit: detectTextLimit(normalizedText),
+        timeRange: buildTextTimeRange(normalizedText),
+        tipe,
+        kategori,
+        itemSearch: null
+    };
 }
 
 function validateSQL(sql, userId) {
@@ -142,7 +318,8 @@ async function fetchTransactions(userId, plan) {
         query = query.gte('tanggal', plan.timeRange.startDate.toISOString());
     }
 
-    const { data, error } = await query.order('tanggal', { ascending: plan.order === 'asc' }).limit(plan.limit);
+    const queryLimit = plan.metric === 'list' ? plan.limit : AGGREGATE_MAX_ROWS;
+    const { data, error } = await query.order('tanggal', { ascending: plan.order === 'asc' }).limit(queryLimit);
 
     if (error) {
         throw error;
@@ -165,18 +342,18 @@ function formatDate(date) {
 
 function formatDataResponse(rows, plan) {
     if (rows.length === 0) {
-        return `📊 *Hasil Analisa AI*:\n\nTidak ada data transaksi untuk ${plan.timeRange.label}.`;
+        return `📊 *Hasil Analisa*:\n\nTidak ada data transaksi untuk ${plan.timeRange.label}.`;
     }
 
     if (plan.metric === 'sum') {
         const total = rows.reduce((sum, row) => sum + Number(row.harga || 0), 0);
         const tipeLabel = plan.tipe ? ` ${plan.tipe}` : '';
 
-        return `📊 *Hasil Analisa AI*:\n\nTotal${tipeLabel} ${plan.timeRange.label}: *${formatCurrency(total)}* dari ${rows.length} transaksi.`;
+        return `📊 *Hasil Analisa*:\n\nTotal${tipeLabel} ${plan.timeRange.label}: *${formatCurrency(total)}* dari ${rows.length} transaksi.`;
     }
 
     if (plan.metric === 'count') {
-        return `📊 *Hasil Analisa AI*:\n\nJumlah transaksi ${plan.timeRange.label}: *${rows.length}* catatan.`;
+        return `📊 *Hasil Analisa*:\n\nJumlah transaksi ${plan.timeRange.label}: *${rows.length}* catatan.`;
     }
 
     const lines = rows.slice(0, 10).map((row) => {
@@ -185,7 +362,7 @@ function formatDataResponse(rows, plan) {
     });
 
     const suffix = rows.length > 10 ? `\n\nMenampilkan 10 dari ${rows.length} transaksi.` : '';
-    return `📊 *Hasil Analisa AI*:\n\n${lines.join('\n')}${suffix}`;
+    return `📊 *Hasil Analisa*:\n\n${lines.join('\n')}${suffix}`;
 }
 
 async function generateSQL(cleanText, userId) {
@@ -216,9 +393,12 @@ ATURAN KERAS:
 Pertanyaan user: "${cleanText}"
     `;
 
-    const model = aiParser.genAI.getGenerativeModel({ model: "gemma-3-27b-it" });
-    const aiResponse = await model.generateContent(prompt);
-    const resultText = aiResponse.response.text().replace(/```json|```/g, '').trim();
+    const { result, modelName } = await llmService.generateContentWithFallback(prompt, {
+        maxOutputTokens: 256
+    });
+
+    logger.info(`LLM NL query called: reason=nl2sql_fallback model=${modelName} llm_called=true`);
+    const resultText = result.response.text().replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(resultText);
     return parsed.sql;
 }
@@ -238,6 +418,19 @@ async function processNLQuery(message, telegramUserId, user) {
         }
 
         const cleanText = sanitizeInput(text);
+        const deterministicPlan = buildDeterministicQueryPlan(cleanText);
+
+        if (deterministicPlan) {
+            logger.info(`LLM NL query skipped: deterministic_plan user=${telegramUserId} llm_called=false`);
+            const rows = await fetchTransactions(userId, deterministicPlan);
+            return formatDataResponse(rows, deterministicPlan);
+        }
+
+        if (process.env.LLM_FALLBACK_ENABLED === 'false') {
+            logger.warn(`LLM NL query disabled and deterministic planner could not parse query from user=${telegramUserId}`);
+            return "⚠️ Maaf, saya belum bisa memproses pertanyaan tersebut. Coba format seperti: total pengeluaran bulan ini.";
+        }
+
         let sql = await generateSQL(cleanText, userId);
 
         // Bersihkan semicolon di akhir agar tidak ditolak validator
@@ -262,6 +455,7 @@ async function processNLQuery(message, telegramUserId, user) {
 module.exports = {
     processNLQuery,
     validateSQL,
+    buildDeterministicQueryPlan,
     buildQueryPlan,
     formatDataResponse
 };

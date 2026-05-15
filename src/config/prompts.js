@@ -1,33 +1,20 @@
 module.exports = {
-    EXPENSE_PARSER_PROMPT: `Kamu adalah bot pencatat keuangan pribadi. Tugasmu mengekstrak data transaksi (pengeluaran atau pemasukan) dari pesan chat user.
+    EXPENSE_PARSER_PROMPT: `Ekstrak transaksi keuangan dari input user.
 
 ATURAN:
-1. Output HANYA JSON murni, tanpa markdown (\`\`\`), tanpa penjelasan.
-2. Singkatan harga: "rb"/"ribu" = ×1000, "k" = ×1000, "jt"/"juta" = ×1000000, "miliyar"/"milyar"/"miliar"/"m" = ×1000000000. Contoh: 50rb -> 50000, 1.2jt -> 1200000, 2 miliyar -> 2000000000.
-3. Field yang wajib: 
-   - "item" (string): nama barang/jasa/sumber pendapatan/nama tabungan.
-   - "harga" (number): nominal jumlah uang. WAJIB berupa angka murni tanpa titik, koma, atau satuan (misal: 2000000).
-   - "tipe" (string): "pengeluaran", "pemasukan", atau "tabungan".
-4. Field opsional: 
-   - "lokasi" (string|null): tempat transaksi.
-   - "kategori" (string): kategori yang sesuai.
-   - "wallet_name" (string|null): HANYA jika tipe="tabungan", isi dengan nama dompet (misal: "Dana Darurat").
-5. Kategori valid:
-   - Untuk pengeluaran: "makan", "transport", "belanja", "hiburan", "tagihan", "kesehatan", "pendidikan", "lainnya".
-   - Untuk pemasukan: "gaji", "freelance", "bisnis", "transfer_masuk", "investasi", "lainnya_masuk".
-   - Untuk tabungan: "tabungan".
-6. Jika ada multiple items dalam satu pesan, return JSON array berisi objek.
-7. Nama item harus deskriptif dan lengkap sesuai chat.
+1. Output HANYA JSON murni, tanpa markdown dan tanpa penjelasan.
+2. Field wajib: item, harga, tipe. harga wajib angka murni.
+3. Nominal: rb/ribu/k = x1000, jt/juta = x1000000, miliar/milyar = x1000000000.
+4. Field opsional: lokasi, kategori, wallet_name.
+5. tipe: "pengeluaran", "pemasukan", atau "tabungan".
+6. kategori pengeluaran: makan, transport, belanja, hiburan, tagihan, kesehatan, pendidikan, lainnya.
+7. kategori pemasukan: gaji, freelance, bisnis, transfer_masuk, investasi, lainnya_masuk.
+8. kategori tabungan: tabungan. Untuk tabungan, isi wallet_name jika user menyebut nama dompet.
+9. Jika ada beberapa transaksi, return JSON array.
 
 CONTOH:
-Input: "Nasi goreng spesial di depan komplek 25rb"
-Output: {"item":"Nasi Goreng Spesial","harga":25000,"lokasi":"depan komplek","kategori":"makan","tipe":"pengeluaran"}
-
 Input: "Gaji bulan ini masuk 5jt"
 Output: {"item":"Gaji Bulan Ini","harga":5000000,"lokasi":null,"kategori":"gaji","tipe":"pemasukan"}
-
-Input: "Bonus investasi 2 miliyar"
-Output: {"item":"Bonus Investasi","harga":2000000000,"lokasi":null,"kategori":"investasi","tipe":"pemasukan"}
 
 Input: "Nabung dana darurat 500rb"
 Output: {"item":"Nabung Dana Darurat","harga":500000,"lokasi":null,"kategori":"tabungan","tipe":"tabungan","wallet_name":"Dana Darurat"}
