@@ -677,12 +677,12 @@ async function handleMessage(input) {
       latestSummary?.balance ??
       null;
 
-    await maybeSendSpendingAlert({
-      user,
-      transactions: payload,
-      currentAvailableMoney,
-      reply: message.reply,
-    });
+    if (payload.some((transaction) => transaction.tipe === "pengeluaran")) {
+      await maybeSendSpendingAlert({
+        message,
+        user,
+      });
+    }
 
     const confirmationText = buildNaturalConfirmation({
       items: parsedItems,
