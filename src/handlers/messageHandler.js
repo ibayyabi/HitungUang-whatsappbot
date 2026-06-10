@@ -421,7 +421,7 @@ async function handleMessage(input) {
     }
 
     if (classification.mode === "question") {
-      const answer = await callFirst(
+      let answer = await callFirst(
         nl2sqlService,
         [
           "answerQuestion",
@@ -437,6 +437,10 @@ async function handleMessage(input) {
           senderId: sender,
         },
       );
+
+      if (!answer && typeof nl2sqlService?.processNLQuery === "function") {
+        answer = await nl2sqlService.processNLQuery(message, sender, user);
+      }
 
       if (typeof answer === "string" && answer.trim()) {
         await message.reply(answer.trim());
@@ -486,6 +490,21 @@ async function handleMessage(input) {
           },
         );
 
+    if (!parsed && message.hasMedia && typeof message.downloadMedia === "function") {
+      const media = await message.downloadMedia();
+      if (
+        ["image", "photo", "picture"].includes(message.mediaType) &&
+        typeof aiParser?.parseImage === "function"
+      ) {
+        parsed = await aiParser.parseImage(media);
+      } else if (
+        ["audio", "voice", "ptt"].includes(message.mediaType) &&
+        typeof aiParser?.parseAudio === "function"
+      ) {
+        parsed = await aiParser.parseAudio(media);
+      }
+    }
+
     if (!parsed && typeof aiParser?.parseExpense === "function") {
       parsed = await aiParser.parseExpense(originalText);
     }
@@ -521,6 +540,7 @@ async function handleMessage(input) {
           "getWalletsByUserId",
           "findWalletsByUserId",
           "listUserWallets",
+          "listActiveWallets",
         ],
         user.id || user.user_id,
       )) || [];
@@ -585,7 +605,27 @@ async function handleMessage(input) {
       }
     }
 
-    const payload = parsedItems.map((item) => ({
+    const totalSavings = parsedItems
+      .filter((item) => item.tipe === "tabungan")
+      .reduce((sum, item) => sum + Number(item.harga || 0), 0);
+
+    if (totalSavings > 0) {
+      const allocationSummary = await callFirst(
+        dbService,
+        ["getMonthlyAllocationSummary"],
+        user.id || user.user_id,
+      );
+      const availableMoney = Number(allocationSummary?.availableMoney ?? allocationSummary?.available_money ?? 0);
+
+      if (Number.isFinite(availableMoney) && availableMoney < totalSavings) {
+        await message.reply(
+          `Available money bulan ini belum cukup untuk tabungan ${formatCurrency(totalSavings)}. Sisa available money kamu ${formatCurrency(availableMoney)}.`,
+        );
+        return;
+      }
+    }
+
+    const payload = parsedItems.map((item) => ({ 
       user_id: user.id || user.user_id,
       userId: user.id || user.user_id,
       item: item.item,
@@ -657,6 +697,20 @@ async function handleMessage(input) {
     ) {
       await message.reply(buildDuplicateReply());
       return;
+    }
+
+    for (const item of parsedItems) {
+      if (
+        item.tipe === "tabungan" &&
+        item.wallet_id &&
+        typeof dbService?.incrementWalletBalance === "function"
+      ) {
+        await dbService.incrementWalletBalance(
+          item.wallet_id,
+          user.id || user.user_id,
+          item.harga,
+        );
+      }
     }
 
     const latestSummary = await callFirst(
