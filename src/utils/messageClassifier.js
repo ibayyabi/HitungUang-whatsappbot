@@ -258,6 +258,7 @@ function hasDashboardIntent(text) {
   }
 
   if (
+    normalized === '/dashboard' ||
     normalized === 'dashboard' ||
     normalized === 'link dashboard' ||
     normalized === 'buka dashboard' ||

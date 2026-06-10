@@ -390,31 +390,13 @@ async function handleMessage(input) {
     }
 
     if (isDashboardAccessCommand(originalText)) {
-      const dashboardLink = await callFirst(
-        authLinkService,
-        [
-          "createWhatsappDashboardLink",
-          "createWhatsAppDashboardLink",
-          "createDashboardLink",
-          "generateDashboardLink",
-          "createMagicLink",
-          "generateMagicLink",
-        ],
-        {
-          userId: user.id || user.user_id,
-          whatsapp: sender,
-          chatId: message.chatId,
-        },
-      );
+      const link = await authLinkService.requestAuthLink({
+        telegramUserId: sender,
+        purpose: "login_web",
+        redirectTo: "/dashboard",
+      });
 
-      const fallbackBaseUrl =
-        process.env.WEB_APP_URL || "http://localhost:3000";
-      const fallbackLink = new URL("/dashboard", fallbackBaseUrl);
-      fallbackLink.searchParams.set("whatsapp", sender);
-
-      await message.reply(
-        buildDashboardReply(dashboardLink || fallbackLink.toString()),
-      );
+      await message.reply(buildDashboardReply(link.actionLink));
       return;
     }
 
