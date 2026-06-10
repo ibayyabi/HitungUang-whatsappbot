@@ -486,6 +486,10 @@ async function handleMessage(input) {
           },
         );
 
+    if (!parsed && typeof aiParser?.parseExpense === "function") {
+      parsed = await aiParser.parseExpense(originalText);
+    }
+
     if (parsed?.data) {
       parsed = parsed.data;
     }
@@ -583,6 +587,7 @@ async function handleMessage(input) {
 
     const payload = parsedItems.map((item) => ({
       user_id: user.id || user.user_id,
+      userId: user.id || user.user_id,
       item: item.item,
       harga: item.harga,
       lokasi: item.lokasi,
@@ -592,7 +597,9 @@ async function handleMessage(input) {
       wallet_name: item.wallet_name || null,
       source: message.hasMedia ? message.mediaType || "media" : "text",
       raw_text: originalText,
+      rawText: originalText,
       whatsapp_user_id: sender,
+      telegramUserId: sender,
     }));
 
     let insertResult = await callFirst(
@@ -603,6 +610,7 @@ async function handleMessage(input) {
         "insertTransactions",
         "saveTransactions",
         "createTransactionsFromParsed",
+        "appendTransactions",
       ],
       payload,
     );
